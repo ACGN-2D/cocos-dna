@@ -105,7 +105,7 @@ Phase 1: 结构          Phase 2: 分析          Phase 3: 生成（Cocos 转换
 | # | 产物 | 路径 | 说明 |
 |---|------|------|------|
 | 1 | Design DNA JSON | `design-dna/design-dna.json` | 唯一真相源 (SSOT) |
-| 2 | UI 结构协议文档 | `design-dna/components/<page>/design.md` | 8章 Markdown |
+| 2 | UI 结构协议文档 | `design-dna/components/<page>/design.md` | 9章 Markdown（含第1.5章） |
 | 3 | 资产绑定清单 | `design-dna/components/<page>/asset-manifest.json` | Sprite UUID 映射 |
 | 4 | AI 绘图 Prompt | `design-dna/components/<page>/assets/art-prompts.md` | 美术资源生成指引 |
 | 5 | Prefab 组件脚本 | `assets/scripts/ui/<page>/<Page>Comp.ts` | @property 声明 |
@@ -113,15 +113,16 @@ Phase 1: 结构          Phase 2: 分析          Phase 3: 生成（Cocos 转换
 | 7 | Prefab 文件 | `assets/resources/prefabs/<page>.prefab` | MCP 自动创建 |
 | 8 | ThemeConfig 更新 | `assets/scripts/config/ThemeConfig.ts` | 全局 tokens 同步 |
 
-### design.md 8 章结构
+### design.md 章节结构（9章，含第1.5章）
 
 | 章节 | 内容 | 何时读取详细规范 |
 |------|------|-----------------|
-| 第1章 设计概述 | 页面功能、视觉目标、设计分辨率 | — |
-| 第2章 整体布局 | ASCII 线框图 | — |
-| 第3章 视觉层级树 | 底→顶视觉层 | — |
+| 第1章 设计概述 | 页面功能、视觉目标、设计分辨率、设计原则 | — |
+| 第1.5章 参考图溯源 | 参考图列表、设计决策追踪表 | — |
+| 第2章 整体布局 | ASCII 线框图 + 布局要点表 | — |
+| 第3章 视觉规范 | 色彩/字体/尺寸/动效 4 个子表 | — |
 | 第4章 节点树 | Cocos Prefab 结构（核心） | → [node-spec.md](references/node-spec.md) |
-| 第5章 元素详述 | 每个元素的设计参数 | — |
+| 第5章 元素详述 | 每个元素的设计参数（Cocos API 格式） | — |
 | 第6章 资源切图表 | 所有图片资源清单 | → [node-spec.md](references/node-spec.md) |
 | 第6.5章 资产绑定 | asset-manifest.json | → [asset-binding.md](references/asset-binding.md) |
 | 第7章 交互逻辑 | 点击、入场动画、页面跳转 | — |
@@ -159,10 +160,10 @@ Phase 1: 结构          Phase 2: 分析          Phase 3: 生成（Cocos 转换
 |------|------|----------|
 | [design-dna-schema.md](references/design-dna-schema.md) | 三维度 JSON Schema | Phase 1 展示结构、Phase 2 首次生成 DNA |
 | [dna-cocos-mapping.md](references/dna-cocos-mapping.md) | DNA→Cocos 映射表 + MCP 流程 + 代码模板 + 路径渲染指南 | Phase 3 执行映射与代码生成 |
-| [output-spec.md](references/output-spec.md) | design.md 8章详细定义 + 动效接口 + 验证清单 | Phase 3 编写 design.md 第8章、最终验证 |
+| [output-spec.md](references/output-spec.md) | design.md 9章详细定义（含第1.5章）+ 动效接口 + 验证清单 | Phase 3 编写 design.md、最终验证 |
 | [node-spec.md](references/node-spec.md) | 节点命名规范、节点信息格式 | Phase 3 构建第4/6章节点树 |
 | [asset-binding.md](references/asset-binding.md) | 资产绑定协议、Schema、状态机 | Phase 3 生成第6.5章 |
-| [example-design.md](references/example-design.md) | 通用格式示例（仅参考格式，不可复制内容） | 理解输出格式 |
+| [example-design.md](references/example-design.md) | 全 9 章格式示例（含第1.5章溯源、Cocos API 交互状态） | 理解输出格式 |
 | [cocos-constraints.md](references/cocos-constraints.md) | Cocos 技术栈禁止清单与约束 | 代码生成/任务规划时自检 |
 
 > **重要**：Agent 在 Cocos Creator 项目中工作时，必须遵守 [cocos-constraints.md](references/cocos-constraints.md) 中的全部约束。核心规则：运行时代码中禁止使用 HTML/CSS/DOM/Web 框架，必须使用 Cocos 原生 API 和组件。

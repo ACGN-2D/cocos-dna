@@ -148,11 +148,49 @@ export class PageNameComp extends Component {
 
 ### Renderer.ts（渲染器逻辑脚本）
 
-继承 `BaseRenderer`（生命周期 `onInit→onShow→onHide→onUpdate`），将 DNA 设计决策转化为运行时逻辑：
+继承 `BaseRenderer`，采用**双层生命周期**（模板方法模式）+ **RendererState 状态机**将 DNA 设计决策转化为运行时逻辑。
+
+#### 渲染器状态机
+
+```
+RendererState:  None ──init()──→ Inited ──show()──→ Visible ──hide()──→ Hidden
+                                   ↑                                      │
+                                   └──────────── show() ──────────────────┘
+                Any non-Disposed ──dispose()──→ Disposed（终态，拦截所有操作）
+```
+
+- `show()` 在 `Disposed` / `None` 下 → `console.error` + 直接 return
+- `hide()` 在非 `Visible` 下 → 安全 noop
+- `dispose()` 在 `Disposed` 下 → 跳过
+
+#### 驱动层 (Public — 由 GameEntry 统一调度，子类**不得重写**)
+
+| 方法 | 状态转换 | 职责 |
+|------|---------|------|
+| `init(parent)` | None → Inited | 创建根节点、状态检查、调用 `onInit()` |
+| `show(data?)` | Inited/Hidden → Visible | 激活节点、防重复显示、调用 `onShow()` |
+| `async hide()` | Visible → Hidden | **await `onHide()`**（退场动画）→ deactivate 节点 |
+| `update(dt)` | — | 仅 Visible 状态调用 `onUpdate(dt)` |
+| `dispose()` | 任意 → Disposed | ① **递归** `_stopTweensRecursive` 停止所有子节点 Tween → ② 调用 `onDispose()` → ③ destroy 节点树 |
+
+#### 业务层 (Hooks — 子类重写)
+
+| 钩子 | 返回类型 | 说明 |
+|------|---------|------|
+| `onInit()` | `void` | **[抽象]** 一次性资源预加载（如图标 SpriteFrame）和 Prefab 实例化 |
+| `onShow(data?)` | `void` | 执行进场动画 `playEnterAnimation()` 和数据绑定 |
+| `async onHide()` | `Promise<void>` | **异步退场动画**（如 0.3s 淡出），完成后 resolve；基类在 resolve 后才 `active=false` |
+| `onUpdate(dt)` | `void` | 驱动粒子/动画帧更新 |
+| `onDispose()` | `void` | 释放子类特有资源、清理引用，解除 DNA 数据引用 |
+
+> **重要**：`hide()` 是 async 的。GameEntry 的 `_switchRenderer` / `_hideCurrentRenderer` 均 `await hide()`，确保退场动画播完再 show 新渲染器。如果子类 `onHide` 无退场动画（默认空实现），await 立即 resolve，零额外开销。
+
+> **dispose 三步顺序**：① `_stopTweensRecursive(root)` 递归停止所有子节点 Tween → ② `onDispose()` 子类释放资源 → ③ `destroy()` 销毁节点树。先 stop 后 dispose 确保子类在 `onDispose()` 中访问节点属性时不会被残留 Tween 回调干扰。子类 `onDispose()` 中无需手动清理 Tween。
 
 ```typescript
 // 模板 — 渲染器逻辑
 import { Color, tween, Vec3 } from 'cc';
+import { BaseRenderer, RendererState } from './BaseRenderer';
 
 export class PageNameRenderer extends BaseRenderer {
     // ═══ DNA Dimension 1: design_system tokens ═══
@@ -165,9 +203,20 @@ export class PageNameRenderer extends BaseRenderer {
         normal: 0.3,          // ← DNA: motion.duration_scale.normal
     };
 
-    onInit(): void { /* 初始化颜色 + 动态效果 */ }
-    onShow(): void { /* 入场动画 */ }
-    onUpdate(dt: number): void { /* 驱动粒子/动画帧更新 */ }
+    protected onInit(): void { /* 初始化颜色 + 动态效果 */ }
+    protected onShow(): void { /* 入场动画 */ }
+    protected onUpdate(dt: number): void { /* 驱动粒子/动画帧更新 */ }
+
+    // 退场动画示例（可选重写）
+    protected async onHide(): Promise<void> {
+        // 如果需要退场动画，用 Promise 包装 tween：
+        // await new Promise<void>(resolve => {
+        //     tween(this._root!)
+        //         .to(0.3, { scale: new Vec3(0.95, 0.95, 1) }, { easing: 'quadIn' })
+        //         .call(() => resolve())
+        //         .start();
+        // });
+    }
 }
 ```
 
