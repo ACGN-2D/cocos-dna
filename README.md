@@ -19,22 +19,29 @@ Phase 1: 结构          Phase 2: 分析          Phase 3: 生成（Cocos 转换
 └─────────────┘     └─────────────────┘     └──────────────────────────┘
 ```
 
-### Phase 1: 结构（由 design-dna 执行）
-- 展示三维度 Schema 结构
-- 询问用户是否需要定制
+## 文件结构
 
-### Phase 2: 分析（由 design-dna 执行）
-- 从参考图提取 Design DNA JSON
-- 每字段必须填充值
+```
+cocos-dna/
+├── SKILL.md                              ← 主指令（~200行，核心工作流）
+├── README.md                             ← 本文件
+└── references/                           ← 按需加载的详细规范
+    ├── design-dna-schema.md              ← 三维度 JSON Schema（Phase 1/2）
+    ├── dna-cocos-mapping.md              ← DNA→Cocos 映射表 + MCP 流程 + 代码模板
+    ├── output-spec.md                    ← design.md 8章定义 + 动效接口 + 验证清单
+    ├── node-spec.md                      ← 节点命名规范、节点信息格式
+    ├── asset-binding.md                  ← 资产绑定协议、状态机
+    ├── example-design.md                 ← 输出格式示例（仅参考格式）
+    └── cocos-constraints.md              ← Cocos 技术栈禁止清单与约束
+```
 
-### Phase 3: 生成（cocos-dna 核心）
-- 解析 DNA JSON
-- 映射为 Cocos 组件（`cc.Sprite`, `cc.Label`, `cc.Button`, `cc.Layout` 等）
-- 生成 UI 结构协议文档（design.md）
-- 生成资产绑定清单（asset-manifest.json）
-- 生成 AI 绘图 Prompt 清单（art-prompts.md）
-- 通过 MCP 自动创建 Prefab
-- 生成 PageComp.ts + Renderer.ts
+### Progressive Disclosure（渐进式加载）
+
+| 层级 | 内容 | 加载时机 |
+|------|------|----------|
+| **Level 1** | name + description（~100 词） | 始终在上下文中 |
+| **Level 2** | SKILL.md 主体（~200 行） | 技能触发时加载 |
+| **Level 3** | references/ 各文件 | 按需读取（仅在需要时） |
 
 ## 核心特性
 
@@ -54,44 +61,14 @@ cocos-dna 依赖 [design-dna](https://github.com/zanwei/design-dna) skill。请�
 https://github.com/zanwei/design-dna
 ```
 
-### 安装 cocos-dna
-
-将本仓库克隆到项目的 `.codebuddy/skills/` 目录：
-
-```bash
-cd your-project/.codebuddy/skills/
-git clone https://github.com/ACGN-2D/cocos-dna.git
-```
-
 ## 触发词
 
 - "解析这张图的 UI 结构"
 - "为这个界面设计 Cocos 节点树"
-- "生成 UI 设计规范"
+- "生成 UI 设计规范 / design.md"
 - "将 DNA 映射为 Cocos 组件"
 - "用 MCP 生成 Prefab"
 - "cocos-dna"
-
-## 输出物
-
-| 产物 | 路径 | 说明 |
-|------|------|------|
-| Design DNA JSON | `design-dna/design-dna.json` | 唯一真相源 (SSOT) |
-| UI 结构协议文档 | `design-dna/components/<page>/design.md` | 8章 Markdown |
-| 资产绑定清单 | `design-dna/components/<page>/asset-manifest.json` | Sprite UUID 映射 |
-| AI 绘图 Prompt | `design-dna/components/<page>/assets/art-prompts.md` | 美术资源生成指引 |
-| Prefab 组件脚本 | `assets/scripts/ui/<page>/<Page>Comp.ts` | @property 声明 |
-| 渲染器脚本 | `assets/scripts/ui/<page>/<Page>Renderer.ts` | DNA 驱动逻辑 |
-| Prefab 文件 | `assets/resources/prefabs/<page>.prefab` | Cocos 编辑器创建 |
-
-## 参考资料
-
-| 文件 | 说明 |
-|------|------|
-| [references/design-dna-schema.md](references/design-dna-schema.md) | 三维度设计系统 JSON Schema |
-| [references/node-spec.md](references/node-spec.md) | 节点命名规范、节点信息格式 |
-| [references/asset-binding.md](references/asset-binding.md) | 资产绑定协议、状态机 |
-| [references/example-design.md](references/example-design.md) | 输出格式示例 |
 
 ## License
 

@@ -1,0 +1,195 @@
+# DNA → Cocos 组件映射与代码生成规范
+
+本文档定义 Phase 3 如何将 Design DNA JSON 转换为 Cocos Creator 实现。
+
+---
+
+## 1. DNA → Cocos 组件映射表
+
+### Dimension 1: design_system → Cocos 组件
+
+| DNA 字段 | Cocos 组件 / API | 转换说明 |
+|----------|-----------------|----------|
+| `color.primary/secondary/accent` | `cc.Color` → `Sprite.color` / `Label.color` | HEX 转 `new Color().fromHEX()` |
+| `color.surface.background` | `cc.Sprite` + `cc.Color` 或渐变材质 | 纯色 → Sprite.color；渐变 → 自定义 Material |
+| `color.surface.card/elevated` | `cc.Sprite` + Alpha | RGBA 透明度映射 Sprite.color.a |
+| `typography.font_families` | `cc.Label.font` (TTF/BitmapFont) | heading → 标题字体；body → 正文字体 |
+| `typography.type_scale.*` | `cc.Label.fontSize` + `cc.Label.lineHeight` | 各级字号直接映射 |
+| `spacing.base_unit` | `cc.Layout.paddingLeft/Right/Top/Bottom` | 间距值映射 Layout padding |
+| `spacing.scale` | `cc.Layout.spacingX/Y` | 间距阶梯映射 Layout spacing |
+| `layout.grid_system` | `cc.Layout` (HORIZONTAL/VERTICAL/GRID) | 根据类型选择布局方向 |
+| `layout.alignment_tendency` | `cc.Widget` 锚点配置 | "centered" → 水平/垂直居中对齐 |
+| `shape.border_radius` | 九宫格 Sprite 或自定义 Mask | 圆角通过 9-slice 或 Graphics 实现 |
+| `elevation.levels` | `cc.Sprite` 阴影层节点 | 每级阴影 → 独立 Sprite 节点偏移 + 模糊 |
+| `motion.easing` | `cc.tween().to({easing})` | 缓动曲线字符串映射 Tween easing |
+| `motion.duration_scale` | `cc.tween().to(duration)` | micro/normal/macro 映射动画时长 |
+| `components.button_style` | `cc.Button` + `Sprite` 状态切换 | primary/secondary/disabled → Button transition |
+| `components.card_style` | `cc.Sprite`(9-slice) + `cc.Layout` | 卡片背景 + 内容布局 |
+| `components.input_style` | `cc.EditBox` | 输入框样式映射 |
+| `components.navigation_pattern` | 自定义导航组件 | 根据模式（tabs/sidebar/etc）选择实现 |
+
+### Dimension 2: design_style → 主观设计决策
+
+| DNA 字段 | 影响的 Cocos 设计决策 |
+|----------|---------------------|
+| `aesthetic.mood` | 整体色调温暖/冷峻选择、材质质感 |
+| `visual_language.whitespace_usage` | Layout padding/spacing 倍率 |
+| `visual_language.contrast_level` | 前景/背景色差强度 |
+| `composition.hierarchy_method` | 用字号/颜色/尺寸中的哪个来建立层级 |
+| `composition.balance_type` | 对称/非对称布局的 Widget 配置 |
+| `imagery.graphic_elements` | 装饰 Sprite 节点的类型和数量 |
+| `interaction_feel.hover_behavior` | Button 悬停态的 Tween 效果 |
+| `interaction_feel.microinteraction_density` | 交互反馈动效的密度 |
+
+### Dimension 3: visual_effects → Cocos 特效组件
+
+| DNA 字段 | Cocos 实现 | 技术选择 |
+|----------|-----------|----------|
+| `background_effects` (gradient-animation) | `cc.tween()` 驱动 Sprite 颜色渐变 | Tween 循环 |
+| `background_effects` (noise-field) | 自定义 Material + Shader | Cocos Effect |
+| `particle_systems` | `cc.ParticleSystem2D` 或程序化 Sprite 模拟 | count < 50 → 程序化；count >= 50 → ParticleSystem2D |
+| `3d_elements` | Cocos 3D 节点 + MeshRenderer | 仅当项目为 3D 模式时 |
+| `shader_effects` | 自定义 Cocos Effect (.effect) | 顶点/片段着色器 |
+| `scroll_effects` | `cc.ScrollView` + `cc.tween()` 组合 | Tween 驱动滚动联动动画 |
+| `text_effects` (typewriter) | `cc.Label` + 定时器逐字显示 | schedule + string.substring |
+| `text_effects` (gradient-fill) | 自定义 Material 文字着色器 | Cocos Effect |
+| `cursor_effects` | 不适用（触屏为主） | 跳过或映射为触摸反馈 |
+| `glassmorphism` | `cc.Sprite` + 模糊材质 | 自定义 blur Effect |
+| `canvas_drawings` | `cc.Graphics` 组件 | 程序化绘制路径（见下方路径渲染指南） |
+| `svg_animations` | `cc.Graphics` + `cc.tween()` | 路径动画描边 |
+
+---
+
+## 2. 路径/连线渲染方案选择指南
+
+在游戏 UI 中绘制节点间连线、路径、虚线等**几何线段**时，**必须优先使用 `cc.Graphics` 组件**，而非创建多个 Sprite 节点拼接。
+
+| 方案 | 节点数 | DrawCall | 虚线支持 | 弯曲路径 | 推荐场景 |
+|------|--------|---------|---------|---------|---------|
+| ❌ N 个 Sprite 拼接 | O(N×路径数) | O(N) | 差（锯齿/断裂） | 不可能 | **禁止用于路径** |
+| ❌ Sprite.Type=TILED 拉伸 | O(路径数) | O(路径数) | 一般 | 不可能 | 仅限简单直线纹理 |
+| ✅ **单 cc.Graphics 组件** | **1** | **1** | ✅ moveTo/lineTo 模拟 | ✅ bezierCurveTo | **路径/连线的标准方案** |
+| ✅ Graphics + 自定义 Shader | **1** | **1** | ✅ Shader 计算 | ✅ 需自定义 | 需要特殊视觉效果时 |
+
+### cc.Graphics 虚线实现模式
+
+```typescript
+private _drawDashedLine(g: Graphics, x1: number, y1: number,
+    x2: number, y2: number, dashLen: number, gapLen: number): void {
+    const dx = x2 - x1, dy = y2 - y1;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    const ux = dx / len, uy = dy / len;
+    let drawn = 0;
+    while (drawn < len) {
+        const segEnd = Math.min(drawn + dashLen, len);
+        g.moveTo(x1 + ux * drawn, y1 + uy * drawn);
+        g.lineTo(x1 + ux * segEnd, y1 + uy * segEnd);
+        drawn = segEnd + gapLen;
+    }
+}
+```
+
+路径状态着色通过切换 `g.strokeColor` 实现 PASSED/UNLOCKED/LOCKED 三态，无需为每条路径创建独立节点。
+
+---
+
+## 3. MCP 驱动的 Prefab 创建流程
+
+```
+design-dna.json ──→ 映射表 ──→ 节点树定义 ──→ MCP 命令序列 ──→ .prefab 文件
+                                    ↓
+                              design.md（8章文档）
+                              asset-manifest.json
+                              PageComp.ts / Renderer.ts
+```
+
+### MCP 调用序列
+
+1. **创建根节点** — MCP: `create-node` → `<PageName>Page`，设置 `UITransform` + `Widget: LRTB=0`
+2. **逐层创建子节点** — 按 design.md 第4章节点树从上到下创建：背景层(`BG`) → 装饰层(`Deco*`) → 内容层(`*Group`/`*Btn`/`*Label`) → 动效层(`*ParticleLayer`/`*AnimLayer`)
+3. **绑定资源** — 根据 `asset-manifest.json` 中 `status: ready` 的资产，MCP `set-property` 用 `spriteFrameUuid` 绑定
+4. **挂载脚本** — MCP `add-component` 在根节点挂载 `PageComp.ts`，关联 `@property` 引用
+5. **保存 Prefab** — MCP `save-prefab` → `assets/resources/prefabs/<page-name>.prefab`
+
+---
+
+## 4. 代码生成规范
+
+Phase 3 生成两个代码文件，遵循以下接口协议。
+
+### PageComp.ts（Prefab 组件脚本）
+
+将 DNA 的组件映射为 `@property` 声明。每个节点在 PageComp 中有对应引用：
+
+| 节点组件类型 | @property 类型 | DNA 来源 |
+|-------------|---------------|----------|
+| `[Node]` | `@property(Node)` | 容器/动效层节点 |
+| `[Label]` | `@property(Label)` | DNA: typography 映射 |
+| `[Sprite]` | `@property(Sprite)` | DNA: color.surface / imagery |
+| `[Button]` | `@property(Button)` | DNA: components.button_style |
+| `[EditBox]` | `@property(EditBox)` | DNA: components.input_style |
+
+```typescript
+// 模板 — 节点属性绑定
+import { _decorator, Component, Node, Label, Sprite, Button } from 'cc';
+const { ccclass, property } = _decorator;
+
+@ccclass('PageNameComp')
+export class PageNameComp extends Component {
+    // ═══ 背景层（DNA: color.surface.background）═══
+    @property(Sprite) bgSprite: Sprite = null!;
+    // ═══ 内容层（DNA: typography + components）═══
+    @property(Label) titleLabel: Label = null!;
+    // ═══ 按钮（DNA: components.button_style）═══
+    @property(Button) primaryBtn: Button = null!;
+    // ... 根据实际节点树生成
+}
+```
+
+### Renderer.ts（渲染器逻辑脚本）
+
+继承 `BaseRenderer`（生命周期 `onInit→onShow→onHide→onUpdate`），将 DNA 设计决策转化为运行时逻辑：
+
+```typescript
+// 模板 — 渲染器逻辑
+import { Color, tween, Vec3 } from 'cc';
+
+export class PageNameRenderer extends BaseRenderer {
+    // ═══ DNA Dimension 1: design_system tokens ═══
+    private readonly COLORS = {
+        primary: new Color().fromHEX('#...'),     // ← DNA: color.primary.hex
+        accent: new Color().fromHEX('#...'),      // ← DNA: color.accent.hex
+    };
+    private readonly MOTION = {
+        easing: 'quadOut',    // ← DNA: motion.easing
+        normal: 0.3,          // ← DNA: motion.duration_scale.normal
+    };
+
+    onInit(): void { /* 初始化颜色 + 动态效果 */ }
+    onShow(): void { /* 入场动画 */ }
+    onUpdate(dt: number): void { /* 驱动粒子/动画帧更新 */ }
+}
+```
+
+### DNA 数据溯源要求
+
+每一行生成的代码都必须可追溯到 DNA JSON 中的具体字段，在代码注释中标注：
+
+```typescript
+// ← DNA: color.primary.hex
+// ← DNA: typography.type_scale.heading_1.size
+// ← DNA: motion.duration_scale.normal
+```
+
+### ThemeConfig 集成
+
+DNA 的 `design_system` tokens 同步写入项目级 `ThemeConfig.ts`：
+
+```
+design-dna.json → color.* → COLORS.* (ThemeConfig.ts)
+                → typography.* → FONT_SIZES.*
+                → spacing.* → SPACING.*
+                → motion.* → MOTION.*
+```
+
+**design-dna.json 是唯一真相源 (SSOT)**，ThemeConfig.ts 是运行时读取层，两者必须同步。
