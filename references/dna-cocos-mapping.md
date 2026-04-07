@@ -187,6 +187,19 @@ RendererState:  None ──init()──→ Inited ──show()──→ Visible 
 
 > **dispose 三步顺序**：① `_stopTweensRecursive(root)` 递归停止所有子节点 Tween → ② `onDispose()` 子类释放资源 → ③ `destroy()` 销毁节点树。先 stop 后 dispose 确保子类在 `onDispose()` 中访问节点属性时不会被残留 Tween 回调干扰。子类 `onDispose()` 中无需手动清理 Tween。
 
+#### 事件监听规范
+
+| 监听方式 | 生命周期清理 | 子类 onDispose 是否需要手动 off |
+|---------|------------|-------------------------------|
+| `node.on(Node.EventType.TOUCH_END, ...)` | `Node.destroy()` 自动清理该节点上的所有事件监听器 | ❌ 不需要（destroy 自动覆盖） |
+| `EventBus.on('event', ...)` | **不会**被 Node.destroy 清理 | ✅ **必须**在 `onDispose()` 中 `EventBus.off()` |
+| `director.on(...)` / `systemEvent.on(...)` | **不会**被 Node.destroy 清理 | ✅ **必须**在 `onDispose()` 中手动 off |
+
+**规范要求**：
+- **优先使用 `node.on()`**：将触摸/鼠标事件绑定在 Prefab 子节点上，dispose 时由 `Node.destroy()` 自动清理，无需手动 off。
+- **若使用 `EventBus.on()`**：子类**必须**在 `onDispose()` 中配对调用 `EventBus.off()`。建议在 `onInit()` 中绑定时保存回调引用，便于 off 时精确匹配。
+- **当前审计结果**：5 个子类均使用 `node.on()` 而非 `EventBus.on()`，dispose 清理已被 `Node.destroy()` 覆盖，风险为低。
+
 ```typescript
 // 模板 — 渲染器逻辑
 import { Color, tween, Vec3 } from 'cc';
