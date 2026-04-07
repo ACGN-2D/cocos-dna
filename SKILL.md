@@ -107,7 +107,7 @@ Phase 1: 结构          Phase 2: 分析          Phase 3: 生成（Cocos 转换
 | 1 | Design DNA JSON | `design-dna/design-dna.json` | 唯一真相源 (SSOT) |
 | 2 | UI 结构协议文档 | `design-dna/components/<page>/design.md` | 9章 Markdown（含第1.5章） |
 | 3 | 资产绑定清单 | `design-dna/components/<page>/asset-manifest.json` | Sprite UUID 映射 |
-| 4 | AI 绘图 Prompt | `design-dna/components/<page>/assets/art-prompts.md` | 美术资源生成指引 |
+| 4 | AI 绘图 Prompt | `design-dna/components/<page>/assets/art-prompts.md` | 美术资源生成指引，产出放 `assets/raw/` |
 | 5 | Prefab 组件脚本 | `assets/scripts/ui/<page>/<Page>Comp.ts` | @property 声明 |
 | 6 | 渲染器脚本 | `assets/scripts/ui/<page>/<Page>Renderer.ts` | DNA 驱动逻辑 |
 | 7 | Prefab 文件 | `assets/resources/prefabs/<page>.prefab` | MCP 自动创建 |
@@ -143,7 +143,9 @@ Phase 1: 结构          Phase 2: 分析          Phase 3: 生成（Cocos 转换
 │   ├── <page-name>/
 │   │   ├── design.md
 │   │   ├── asset-manifest.json
-│   │   ├── assets/art-prompts.md
+│   │   ├── assets/
+│   │   │   ├── art-prompts.md    ← AI 绘图 Prompt
+│   │   │   └── raw/              ← AI 生成的原始资产（不参与 Cocos 构建）
 │   │   └── references/
 │   └── ...
 └── README.md
@@ -162,7 +164,7 @@ Phase 1: 结构          Phase 2: 分析          Phase 3: 生成（Cocos 转换
 | [dna-cocos-mapping.md](references/dna-cocos-mapping.md) | DNA→Cocos 映射表 + MCP 流程 + 代码模板 + 路径渲染指南 | Phase 3 执行映射与代码生成 |
 | [output-spec.md](references/output-spec.md) | design.md 9章详细定义（含第1.5章）+ 动效接口 + 验证清单 | Phase 3 编写 design.md、最终验证 |
 | [node-spec.md](references/node-spec.md) | 节点命名规范、节点信息格式 | Phase 3 构建第4/6章节点树 |
-| [asset-binding.md](references/asset-binding.md) | 资产绑定协议、Schema、状态机 | Phase 3 生成第6.5章 |
+| [asset-binding.md](references/asset-binding.md) | 资产绑定协议、Schema、状态机、**静态 vs 动态资源目录决策** | Phase 3 生成第6.5章 |
 | [example-design.md](references/example-design.md) | 全 9 章格式示例（含第1.5章溯源、Cocos API 交互状态） | 理解输出格式 |
 | [cocos-constraints.md](references/cocos-constraints.md) | Cocos 技术栈禁止清单与约束 | 代码生成/任务规划时自检 |
 

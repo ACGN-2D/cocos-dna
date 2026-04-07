@@ -107,7 +107,10 @@ design-dna.json ──→ 映射表 ──→ 节点树定义 ──→ MCP 命�
 
 1. **创建根节点** — MCP: `create-node` → `<PageName>Page`，设置 `UITransform` + `Widget: LRTB=0`
 2. **逐层创建子节点** — 按 design.md 第4章节点树从上到下创建：背景层(`BG`) → 装饰层(`Deco*`) → 内容层(`*Group`/`*Btn`/`*Label`) → 动效层(`*ParticleLayer`/`*AnimLayer`)
-3. **绑定资源** — 根据 `asset-manifest.json` 中 `status: ready` 的资产，MCP `set-property` 用 `spriteFrameUuid` 绑定
+3. **绑定资源** — 两种绑定方式（由 asset-manifest.json 的 `loadType` 决定）：
+   - **静态资源** (`loadType: "static"`)：资源放 `assets/textures/<page>/`，在 Prefab JSON 的 PageComp 序列化数据中添加 `@property(SpriteFrame)` 属性，直接引用 `spriteFrameUuid`（`<uuid>@f9941`）。构建器自动依赖追踪
+   - **动态资源** (`loadType: "dynamic"`, 默认)：资源放 `assets/resources/textures/<page>/`，Renderer 代码中 `resources.load()` 加载。asset-manifest.json 记录 UUID 映射
+   - **原资产追溯**：AI 生成的原始图片存放在 `design-dna/components/<page>/assets/raw/`，asset-manifest.json 的 `sourceFile` 字段记录原资产路径，建立设计产物→正式资产的可追溯链
 4. **挂载脚本** — MCP `add-component` 在根节点挂载 `PageComp.ts`，关联 `@property` 引用
 5. **保存 Prefab** — MCP `save-prefab` → `assets/resources/prefabs/<page-name>.prefab`
 
@@ -126,18 +129,23 @@ Phase 3 生成两个代码文件，遵循以下接口协议。
 | `[Node]` | `@property(Node)` | 容器/动效层节点 |
 | `[Label]` | `@property(Label)` | DNA: typography 映射 |
 | `[Sprite]` | `@property(Sprite)` | DNA: color.surface / imagery |
+| `[SpriteFrame]` | `@property(SpriteFrame)` | **静态绑定资源**（固定背景、固定图标等） |
 | `[Button]` | `@property(Button)` | DNA: components.button_style |
 | `[EditBox]` | `@property(EditBox)` | DNA: components.input_style |
 
+> **静态资源绑定规则**：当某个 Sprite 的图片是固定不变的（路径写死），应在 PageComp 中声明 `@property(SpriteFrame)`，在 Prefab JSON 中直接绑定该图片的 `spriteFrameUuid`（`<uuid>@f9941`），而不是在 Renderer 中用 `resources.load()` 动态加载。详见 → [asset-binding.md](asset-binding.md)「静态引用 vs 动态加载」
+
 ```typescript
 // 模板 — 节点属性绑定
-import { _decorator, Component, Node, Label, Sprite, Button } from 'cc';
+import { _decorator, Component, Node, Label, Sprite, SpriteFrame, Button } from 'cc';
 const { ccclass, property } = _decorator;
 
 @ccclass('PageNameComp')
 export class PageNameComp extends Component {
     // ═══ 背景层（DNA: color.surface.background）═══
     @property(Sprite) bgSprite: Sprite = null!;
+    /** 背景图 SpriteFrame — 静态引用，Prefab 序列化绑定 UUID */
+    @property(SpriteFrame) bgSpriteFrame: SpriteFrame = null!;
     // ═══ 内容层（DNA: typography + components）═══
     @property(Label) titleLabel: Label = null!;
     // ═══ 按钮（DNA: components.button_style）═══
