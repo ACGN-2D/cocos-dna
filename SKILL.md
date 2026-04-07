@@ -167,5 +167,14 @@ Phase 1: 结构          Phase 2: 分析          Phase 3: 生成（Cocos 转换
 | [asset-binding.md](references/asset-binding.md) | 资产绑定协议、Schema、状态机、**静态 vs 动态资源目录决策** | Phase 3 生成第6.5章 |
 | [example-design.md](references/example-design.md) | 全 9 章格式示例（含第1.5章溯源、Cocos API 交互状态） | 理解输出格式 |
 | [cocos-constraints.md](references/cocos-constraints.md) | Cocos 技术栈禁止清单与约束 | 代码生成/任务规划时自检 |
+| [validate-workflow.md](references/validate-workflow.md) | V1-V4 验证规范（设计文档/Prefab/代码/测试） | Phase 3 完成后自动验证 |
+
+## 可执行脚本
+
+| 脚本 | 用途 | 调用方式 |
+|------|------|----------|
+| [scripts/mcp-client.js](scripts/mcp-client.js) | 通用 MCP 通信层 — 场景/节点/组件/Prefab 操作 API | `require()` 或 `node scripts/mcp-client.js [port]` 测试连通性 |
+| [scripts/resolve-asset-uuids.js](scripts/resolve-asset-uuids.js) | 解析 .meta → UUID，写回 asset-manifest.json | `node scripts/resolve-asset-uuids.js --project <path>` |
+| [scripts/ui-dev-workflow.js](scripts/ui-dev-workflow.js) | V1-V4 验证引擎（通用，不含项目硬编码） | `node scripts/ui-dev-workflow.js --project <path> <ui-name>` |
 
 > **重要**：Agent 在 Cocos Creator 项目中工作时，必须遵守 [cocos-constraints.md](references/cocos-constraints.md) 中的全部约束。核心规则：运行时代码中禁止使用 HTML/CSS/DOM/Web 框架，必须使用 Cocos 原生 API 和组件。
