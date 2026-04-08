@@ -1,5 +1,7 @@
 # Cocos 技术栈开发约束
 
+> **适用版本**：Cocos Creator **3.7+**（推荐 3.8 / 4.x）。本文档中的 API、组件名、枚举值均基于 3.7+ 验证。
+
 本文档适用于所有在 Cocos Creator 项目中工作的 AI Agent（包括 openspec、coding agent、任务规划 agent 等）。无论 Agent 处于何种工作模式，都必须遵守以下约束。
 
 ---

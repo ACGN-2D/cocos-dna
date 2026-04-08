@@ -23,16 +23,30 @@ Phase 1: 结构          Phase 2: 分析          Phase 3: 生成（Cocos 转换
 
 ```
 cocos-dna/
-├── SKILL.md                              ← 主指令（~200行，核心工作流）
+├── SKILL.md                              ← 主指令（核心工作流）
 ├── README.md                             ← 本文件
-└── references/                           ← 按需加载的详细规范
-    ├── design-dna-schema.md              ← 三维度 JSON Schema（Phase 1/2）
-    ├── dna-cocos-mapping.md              ← DNA→Cocos 映射表 + MCP 流程 + 代码模板
-    ├── output-spec.md                    ← design.md 8章定义 + 动效接口 + 验证清单
-    ├── node-spec.md                      ← 节点命名规范、节点信息格式
-    ├── asset-binding.md                  ← 资产绑定协议、状态机
-    ├── example-design.md                 ← 输出格式示例（仅参考格式）
-    └── cocos-constraints.md              ← Cocos 技术栈禁止清单与约束
+├── references/                           ← 按需加载的详细规范
+│   ├── design-dna-schema.md              ← 三维度 JSON Schema（Phase 1/2）
+│   ├── dna-cocos-mapping.md              ← DNA→Cocos 映射表 + MCP 流程 + 代码模板
+│   ├── output-spec.md                    ← design.md 9章定义 + 动效接口 + 验证清单
+│   ├── node-spec.md                      ← 节点命名规范、节点信息格式
+│   ├── asset-binding.md                  ← 资产绑定协议、三层目录结构
+│   ├── cocos-constraints.md              ← Cocos 技术栈禁止清单与约束
+│   ├── validate-workflow.md              ← V1-V4 验证规范
+│   └── runtime-integration.md            ← ★ Runtime 集成规范（同步 + 改造指南）
+├── templates/                            ← ★ 通用代码模板（同步到项目）
+│   └── runtime/                          ← Runtime 基础设施
+│       ├── ResourceManager.ts            ← 资源加载/缓存/分组释放
+│       ├── LayerManager.ts               ← UI 层级管理（page/popup/effect/guide）
+│       └── README.md                     ← 版本说明 + 变更日志
+├── scripts/                              ← 可执行工具脚本
+│   ├── mcp-client.js                     ← 通用 MCP 通信层
+│   ├── resolve-asset-uuids.js            ← 资产 UUID 解析
+│   ├── ui-dev-workflow.js                ← V1-V4 验证引擎
+│   └── sync-runtime.js                   ← ★ Runtime 模板同步工具
+└── examples/                             ← 格式模板
+    ├── README.md
+    └── _example-page/                    ← 完整页面目录结构示例
 ```
 
 ### Progressive Disclosure（渐进式加载）

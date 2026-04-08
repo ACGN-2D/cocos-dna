@@ -2,7 +2,113 @@
 
 本章解决设计文档到 Cocos Prefab 的资源 UUID 映射断裂问题。
 
-## asset-manifest.json
+---
+
+## 一、目录结构：三层归属分类（工业级推荐）
+
+### 核心原则
+
+- **一级按 ownership（归属）**：common / pages / modules
+- **二级按复用层级**：具体的功能子分类
+- **两棵树结构一致，加载语义不同**
+
+```
+assets/textures/                        ← 静态引用（Prefab @property 绑定）
+├── common/                             ← 全局复用：所有页面都能用的基础 UI 资源
+│   ├── buttons/                        ← 通用按钮（confirm, cancel, close）
+│   │   ├── btn_primary_bg.png
+│   │   ├── btn_secondary_bg.png
+│   │   └── btn_hover_glow.png
+│   ├── icons/                          ← 通用图标（装饰、分隔线等）
+│   │   ├── icon_deco_s.png
+│   │   ├── icon_deco_m.png
+│   │   └── divider_fade.png
+│   └── effects/                        ← 通用特效（粒子贴图等）
+│       └── fx_particle_dot.png
+│
+├── pages/                              ← 页面专属：只有该页面使用
+│   ├── <page-a>/                       ← 页面 A 专属（按项目实际页面命名）
+│   │   ├── <page-a>_bg.png
+│   │   └── ...
+│   ├── <page-b>/                       ← 页面 B 专属
+│   └── <page-c>/                       ← 页面 C 专属
+│
+└── modules/                            ← 跨页面业务模块：多个页面复用的完整业务组件
+    └── (暂无，未来如 reward-popup / hero-panel 可放此处)
+
+assets/resources/textures/              ← 动态加载（resources.load()）
+├── common/                             ← 全局动态复用（尽量少用，只放主题切换类资源）
+│   └── themes/                         ← 皮肤/主题动态切换
+│
+├── pages/                              ← 页面专属动态资源
+│   ├── <page-a>/                       ← 页面 A 动态资源（按 ID / 类型动态加载的资源）
+│   │   ├── item_bg_type1.png
+│   │   ├── item_bg_type2.png
+│   │   └── ...
+│   ├── <page-b>/                       ← 页面 B 动态资源
+│   └── <page-c>/                       ← 页面 C 动态资源
+│
+├── characters/                         ← 实体类型：按角色 ID 动态加载
+│   ├── <character_id>.png
+│   └── ...
+├── enemies/                            ← 实体类型：按敌人 ID 动态加载
+│   ├── <enemy_id>.png
+│   └── ...
+├── backgrounds/                        ← 背景 fallback 副本（静态绑定失败时的兜底）
+│   ├── <page-a>_bg.png
+│   └── ...
+│
+└── modules/                            ← 跨页面业务模块动态资源
+    └── (暂无)
+```
+
+### 三层定义
+
+| 层级 | 含义 | 判断标准 | 典型资源 |
+|------|------|---------|---------|
+| **common** | 全局复用 | 所有人都能用，无页面归属 | `btn_primary_bg`, `icon_deco_s`, `fx_particle_dot`, `divider_fade` |
+| **pages** | 页面拥有 | 仅该页面使用，其他页面不引用 | `<page-a>/bar_hp_bg`, `<page-c>/icon_node_xxx` |
+| **modules** | 功能模块拥有 | 跨多个页面复用的完整业务模块 | `reward-popup/`, `hero-panel/`（未来） |
+
+### ⚠️ 分类容易误判的注意点
+
+- `characters/` 和 `enemies/` **不属于任何页面也不属于 common**，它们是**实体类型（entity-type）**目录，按 ID 动态加载，直接放 `resources/textures/` 一级。
+- `backgrounds/` 的 fallback 副本也是类似的实体类型目录，不归入 pages。
+- common **尽量不进 resources**。因为 common 本来就是高频常驻资源，放 resources 反而增加管理负担。只有动态主题切换场景才需要 `resources/textures/common/themes/`。
+
+---
+
+## 二、唯一 Owner 原则（最重要的规则）
+
+### 口诀
+
+> **能拖进 Prefab 的，不进 resources。必须靠路径加载的，才进 resources。**
+
+### 规则
+
+1. **同一资源只能有唯一物理位置（owner）**。禁止在 `assets/textures/` 和 `assets/resources/textures/` 同时存放相同文件。
+
+2. **唯一例外：背景图 fallback 模式**。3 个页面背景图允许在 `assets/textures/pages/<page>/` 和 `assets/resources/textures/backgrounds/` 各有一份，因为项目使用"静态优先 + 动态 Fallback"双保险模式，且这是基于 Cocos CLI 构建器序列化 Missing class 问题的已知工程妥协。
+
+### 决策矩阵
+
+| 问题 | 答案 → 放哪 |
+|------|-------------|
+| Prefab 中直接拖引用？ | → `assets/textures/` (static) |
+| 代码中 `resources.load()` 路径拼接？ | → `assets/resources/textures/` (dynamic) |
+| 路径是字符串常量？ | → 优先考虑改为 @property 静态引用 |
+| 路径包含变量（如 `${characterId}`）？ | → 必须放 resources |
+
+### loadType 与目录的映射
+
+| loadType | assetPath 前缀 | 实现方式 |
+|----------|---------------|---------|
+| `static` | `assets/textures/common/` 或 `assets/textures/pages/<page>/` | `@property(SpriteFrame)` 在 PageComp 中声明，Prefab 序列化绑定 UUID |
+| `dynamic` | `assets/resources/textures/pages/<page>/` 或 `assets/resources/textures/<entity-type>/` | `resources.load('textures/...')` 或 `loadImageToSprite()` |
+
+---
+
+## 三、asset-manifest.json
 
 每个界面生成 `cocos-dna/components/<page-name>/asset-manifest.json`。
 
@@ -10,7 +116,7 @@
 
 ```json
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "page": "<page-name>",
   "generatedAt": null,
   "description": "界面描述",
@@ -22,15 +128,16 @@
 
 ```json
 {
-  "id": "icon_gear_deco_s",
-  "designRef": "DecoGear_TL.SpriteFrame",
-  "filename": "icon_gear_deco_s.png",
-  "assetPath": "assets/resources/textures/<page-name>/icon_gear_deco_s.png",
+  "id": "icon_example",
+  "designRef": "DecoElement_TL.SpriteFrame",
+  "filename": "icon_example.png",
+  "assetPath": "assets/textures/common/icons/icon_example.png",
   "category": "decoration",
   "type": "sprite-frame",
   "status": "missing",
-  "loadType": "dynamic",
-  "sourceFile": "cocos-dna/components/<page-name>/assets/raw/icon_gear_deco_s_raw.png",
+  "loadType": "static",
+  "ownership": "common",
+  "sourceFile": "cocos-dna/components/<page-name>/assets/raw/icon_example_raw.png",
   "uuid": null,
   "spriteFrameUuid": null,
   "meta": {
@@ -49,20 +156,30 @@
 | `id` | ✅ | 资源唯一标识符 (snake_case) |
 | `designRef` | ✅ | 设计文档中引用此资源的节点.属性 |
 | `filename` | ✅ | 文件名（不含路径） |
-| `assetPath` | ✅ | 相对项目根的完整路径（目录由 `loadType` 决定） |
+| `assetPath` | ✅ | 相对项目根的完整路径（遵循三层目录结构） |
 | `category` | ✅ | 分类: background / decoration / icon / button / effect / character / card / frame / node / ui |
 | `type` | ✅ | Cocos 资源类型: sprite-frame / texture / spine / particle |
 | `status` | ✅ | 状态: missing / exists / ready / deprecated / size_mismatch |
+| `loadType` | ✅ | 加载方式: `static`（@property 绑定）/ `dynamic`（resources.load）。默认 `dynamic` |
+| `ownership` | ✅ | 归属层级: `common` / `page` / `module` / `entity-type`。决定 assetPath 中的子目录 |
 | `uuid` | - | 图片资源主 UUID（从 .meta 顶层 uuid） |
 | `spriteFrameUuid` | - | SpriteFrame 子资源 UUID（格式: `<uuid>@f9941`） |
 | `meta` | - | 尺寸、格式、九宫格信息 |
 | `boundToNodes` | - | Prefab 中引用此资源的节点路径数组 |
-| `loadType` | - | 加载方式: `static`（@property 绑定，放 assets/textures/）/ `dynamic`（resources.load，放 assets/resources/textures/）。默认 `dynamic` |
-| `sourceFile` | - | AI 生成的原始资产路径（相对项目根），如 `cocos-dna/components/<page>/assets/raw/xxx_raw.png`。null 表示直接手工制作或代码生成。原图可能需要去背景等后处理 |
+| `sourceFile` | - | AI 生成的原始资产路径（相对项目根），null 表示直接手工制作或代码生成 |
+
+### ownership 与 assetPath 对应关系
+
+| ownership | loadType=static assetPath | loadType=dynamic assetPath |
+|-----------|--------------------------|---------------------------|
+| `common` | `assets/textures/common/<sub>/...` | `assets/resources/textures/common/<sub>/...`（尽量避免） |
+| `page` | `assets/textures/pages/<page>/...` | `assets/resources/textures/pages/<page>/...` |
+| `module` | `assets/textures/modules/<module>/...` | `assets/resources/textures/modules/<module>/...` |
+| `entity-type` | — | `assets/resources/textures/<entity-type>/...`（characters/enemies/backgrounds） |
 
 ---
 
-## 状态机
+## 四、状态机
 
 ```
 missing  →  exists  →  ready
@@ -87,22 +204,20 @@ size_mismatch ← exists/ready（尺寸校验失败时回退到此状态）
 AI 绘图          原资产存放              放入正式目录                Cocos 集成
 ┌──────────┐   ┌──────────────────┐   ┌────────────────────────┐   ┌──────────────────┐
 │art-prompts│→ │cocos-dna/        │→ │复制到 assetPath 指向的  │→ │.meta 自动生成     │
-│.md 生成   │   │components/<page>/│   │目录（由 loadType 决定）│   │resolve-asset-uuids│
-│(含尺寸)   │   │assets/raw/       │   │static → assets/textures/│   │→ status=ready     │
-│           │   │  xxx_raw.png     │   │dynamic→ assets/resources/│  │→ MCP/Prefab 绑定  │
-└──────────┘   └──────────────────┘   └────────────────────────┘   └──────────────────┘
+│.md 生成   │   │components/<page>/│   │目录（三层结构判定归属）│   │resolve-asset-uuids│
+│(含尺寸)   │   │assets/raw/       │   │common→ textures/common/│   │→ status=ready     │
+│           │   │  xxx_raw.png     │   │page → textures/pages/  │   │→ MCP/Prefab 绑定  │
+└──────────┘   └──────────────────┘   │entity→ resources/...   │   └──────────────────┘
+                                      └────────────────────────┘
 ```
 
 - **原资产目录** `cocos-dna/components/<page>/assets/raw/` — 保存 AI 生成的原始图片，不参与 Cocos 构建
 - `sourceFile` 字段记录原资产路径，建立设计产物→最终资产的可追溯关联。原图可能需要去背景等后处理后再放入正式目录
-- `assetPath` 的目录由 `loadType` 决定（需要目录时用 `path.dirname(assetPath)`）：
-  - `static` → `assets/textures/<page>/xxx.png`（Prefab @property 绑定，构建器自动依赖追踪）
-  - `dynamic` → `assets/resources/textures/<page>/xxx.png`（代码 resources.load）
 - AI 生成时 prompt 已指定精确尺寸，**不需要裁切/缩放**。尺寸不符应调整 prompt 重新生成
 
 ---
 
-## MCP 绑定关键
+## 五、MCP 绑定关键
 
 在通过 Cocos MCP 绑定 `cc.Sprite.spriteFrame` 属性时，**始终使用 `spriteFrameUuid`**（带 `@f9941` 后缀），而不是主 `uuid`。
 
@@ -113,24 +228,29 @@ AI 绘图          原资产存放              放入正式目录              
 
 ---
 
-## 静态引用 vs 动态加载 — 资源目录决策
+## 六、静态引用 vs 动态加载 — 深度指南
 
-资源放 `assets/textures/` 还是 `assets/resources/textures/` 取决于**加载方式**：
+### 两棵树的职责差异
 
-### 决策矩阵
+| 维度 | `assets/textures/`（静态） | `assets/resources/textures/`（动态） |
+|------|--------------------------|-------------------------------------|
+| **加载方式** | Prefab / Scene Inspector 直接引用 | `resources.load()` 运行时加载 |
+| **生命周期管理** | 引擎自动（跟随 Prefab 打包、引用计数、依赖链释放） | **手动管理**（load / release，需要你自己控制） |
+| **构建行为** | 构建器自动依赖分析，按需打入 | `resources/` 下**所有资源**都打入包（无论是否使用） |
+| **适用场景** | 固定引用、内容不变、路径写死的资源 | 路径由变量拼接、运行时数据驱动的资源 |
 
-| 加载方式 | 目录 | 适用场景 | 实现方式 |
-|---------|------|---------|---------|
-| **静态引用** | `assets/textures/` | 路径写死、内容固定不变的资源（如固定背景图、按钮图标） | `@property(SpriteFrame)` 在 PageComp 中声明，Prefab 序列化绑定 UUID |
-| **动态加载** | `assets/resources/textures/` | 运行时根据数据决定加载哪个资源（如根据角色 ID、敌人 ID 拼路径） | `resources.load('textures/xxx')` 或 `loadImageToSprite()` |
+### 决策口诀（写入团队规范）
 
-### 判断原则
+> **能拖进 Prefab 的，不进 resources。必须靠路径加载的，才进 resources。**
 
-1. **问：代码中加载路径是否写死（字符串常量）？**
-   - 是 → **静态引用**。直接在 Prefab 中用 `@property(SpriteFrame)` 绑定，不需要放 `resources/`
-   - 否（路径由变量拼接，如 `` `textures/characters/${characterId}` ``）→ **动态加载**。必须放 `resources/`
+### 通用按钮到底放哪？
 
-2. **`resources/` 目录的代价**：构建时 `resources/` 下的**所有**资源都会打入包中（无论是否使用），滥用会导致包体膨胀
+`btn_primary_bg`、`btn_secondary_bg`、`icon_deco_*`、`divider_fade`、`fx_particle_dot` 等跨页面复用资源：
+
+- ✅ 所有页面 Prefab 都直接拖引用 → 放 `assets/textures/common/`（**最佳**）
+- ❌ 不需要每次 `resources.load()`，避免多余 IO 和 cache 管理
+
+**唯一例外**：动态主题切换（如皮肤系统 `theme_dark_confirm_btn` / `theme_light_confirm_btn`）才放 `assets/resources/textures/common/themes/`。
 
 ### PageComp 静态绑定实现
 
@@ -138,6 +258,9 @@ AI 绘图          原资产存放              放入正式目录              
 // PageComp 中声明
 @property(SpriteFrame)
 backgroundSpriteFrame: SpriteFrame = null!;
+
+@property(SpriteFrame)
+btnPrimaryBgSpriteFrame: SpriteFrame = null!;  // common 按钮也可静态绑定
 ```
 
 ```json
@@ -149,11 +272,11 @@ backgroundSpriteFrame: SpriteFrame = null!;
 ```
 
 ```typescript
-// Renderer 中使用 — 优先静态引用，fallback 动态加载
+// Renderer 中使用 — 静态优先，fallback 动态加载
 private _loadBackgroundImage(): void {
     if (!this._bgSprite) return;
     if (this._comp?.backgroundSpriteFrame) {
-        // 静态引用（零运行时开销，构建器自动追踪依赖）
+        // 静态路径（零运行时开销，构建器自动追踪依赖）
         this._bgSprite.spriteFrame = this._comp.backgroundSpriteFrame;
     } else {
         // Fallback: 动态加载（兼容 Prefab 尚未绑定的过渡状态）
@@ -162,32 +285,56 @@ private _loadBackgroundImage(): void {
 }
 ```
 
-### 项目标准目录结构
+### 项目优化方向（通用建议）
 
-```
-assets/textures/                    ← 静态引用资源（Prefab @property 绑定）
-├── backgrounds/                    ← 固定背景（main_menu_bg, battle_bg, map_bg）
-├── cards/                          ← 卡牌图（Prefab 中拖拽绑定）
-├── ui/                             ← UI 图标/按钮（Prefab 中拖拽绑定）
-└── effects/                        ← 特效图
+**典型问题**：项目初期大量资源走动态加载（含 common 级按钮/图标），偏激进。
 
-assets/resources/textures/          ← 动态加载资源（resources.load()）
-├── backgrounds/                    ← 全部背景图（含固定背景的 fallback 副本）
-│   ├── main_menu_bg.png            ← fallback 副本（Renderer 静态引用为 null 时兜底）
-│   ├── battle_bg.png               ← fallback 副本
-│   ├── map_bg.png                  ← fallback 副本
-│   ├── boss_bg.png                 ← 动态专用（DialogueRenderer）
-│   └── shop_bg.png                 ← 动态专用（DialogueRenderer）
-├── characters/                     ← 角色立绘（根据角色 ID 动态加载）
-├── enemies/                        ← 敌人立绘（根据敌人 ID 动态加载）
-└── route-map/                      ← 地图图标（根据节点类型动态加载）
-```
+**优化路径**（渐进式，不需要一步到位）：
 
-> **为什么固定背景在 resources 有副本**：CLI 构建器在序列化 Prefab 时，如果自定义脚本的 `__type__` 无法解析（Missing class 警告），会跳过该组件的全部 `@property` UUID 引用，导致静态绑定的资源不被依赖追踪、不打入构建包。resources 副本确保 Renderer 的 fallback `resources.load()` 路径在构建后仍可用。
+| 优先级 | 操作 | 收益 |
+|--------|------|------|
+| P0 | common 按钮/图标从 `resources/textures/` 迁移到 `textures/common/`，改为 @property 静态引用 | 减少 resources.load() 调用、降低包体冗余 |
+| P1 | 各页面专属静态资源从 `resources/` 迁移到 `textures/pages/<page>/` | 进一步减少 resources 目录膨胀 |
+| P2 | 保留 characters/enemies 等实体类型的动态加载（这些必须动态） | 维持正确的运行时数据驱动 |
+| P3 | 保留 backgrounds/ fallback 副本（CLI 构建 Missing class 的工程妥协） | 双保险机制不变 |
 
 ---
 
-## JSON Schema
+## 七、assetPath 路径规则速查
+
+### loadType=static（@property 绑定）
+
+| ownership | assetPath 模式 |
+|-----------|----------------|
+| common 按钮 | `assets/textures/common/buttons/btn_primary_bg.png` |
+| common 图标 | `assets/textures/common/icons/icon_deco_s.png` |
+| common 特效 | `assets/textures/common/effects/fx_particle_dot.png` |
+| 页面背景 | `assets/textures/pages/<page>/<page>_bg.png` |
+| 页面专属 UI | `assets/textures/pages/<page>/bar_hp_bg.png` |
+
+### loadType=dynamic（resources.load）
+
+| ownership | assetPath 模式 | resources.load 路径 |
+|-----------|----------------|---------------------|
+| 页面动态资源 | `assets/resources/textures/pages/battle/card_bg_attack.png` | `textures/pages/battle/card_bg_attack` |
+| 角色立绘 | `assets/resources/textures/characters/${id}.png` | `textures/characters/${id}` |
+| 敌人立绘 | `assets/resources/textures/enemies/${id}.png` | `textures/enemies/${id}` |
+| 背景 fallback | `assets/resources/textures/backgrounds/battle_bg.png` | `textures/backgrounds/battle_bg` |
+
+> **注意**：resources.load 路径 = assetPath 去掉 `assets/resources/` 前缀和 `.png` 后缀。
+
+---
+
+## 八、禁止事项
+
+1. ❌ **同一文件存两份**：禁止 `textures/common/X.png` 和 `resources/textures/common/X.png` 同时存在（背景 fallback 例外）
+2. ❌ **common 资源归属到某个页面**：`btn_primary_bg` 不能放 `textures/pages/<page>/`，应放 `textures/common/buttons/`
+3. ❌ **滥用 resources 目录**：能静态引用的资源不进 resources，`resources/` 下所有资源构建时全部打入包
+4. ❌ **跨页面用"复用 xxx"注释代替正确归属**：如果多页面使用，应归入 common 或 modules，不应保留在某个 page 下标注"复用"
+
+---
+
+## 九、JSON Schema
 
 完整的 JSON Schema 定义应放在项目级 `cocos-dna/asset-manifest.schema.json` 中。
 
@@ -197,5 +344,6 @@ assets/resources/textures/          ← 动态加载资源（resources.load()）
 - `type` 枚举：`sprite-frame | texture | spine | particle`
 - `status` 枚举：`missing | exists | ready | deprecated | size_mismatch`
 - `loadType` 枚举：`static | dynamic`（默认 `dynamic`）
+- `ownership` 枚举：`common | page | module | entity-type`
 - `sourceFile`：字符串或 null，指向 `cocos-dna/components/<page>/assets/raw/` 下的原始资产
 - `meta.size`：`{ w, h }` 为预设尺寸（必填），`resolve-asset-uuids.js` 直接从 Cocos `.meta` 文件的 `subMetas.f9941.userData.rawWidth/rawHeight` 读取实际像素尺寸进行校验（零额外 I/O），不符则标记 `size_mismatch`

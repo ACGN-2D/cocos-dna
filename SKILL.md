@@ -10,6 +10,15 @@ description: >-
 
 # cocos-dna — Cocos Creator UI 设计规范技能
 
+## 版本兼容性
+
+| 引擎 | 支持版本 | 说明 |
+|------|---------|------|
+| **Cocos Creator** | **3.7+**（推荐 3.8 / 4.x） | 依赖 `cc.tween` 新 API、`Widget.AlignMode`、`Sprite.SizeMode.CUSTOM`、Prefab 嵌套序列化等 3.7+ 特性 |
+| Node.js（工具脚本） | 16+ | `sync-runtime.js`、`resolve-asset-uuids.js` 等使用 ES2020+ 语法 |
+
+> **低版本注意**：Cocos Creator 3.6 及以下版本的 `resources.load` 回调签名和 Prefab 序列化格式可能与本 skill 模板不兼容。如需支持更早版本，请在 `templates/runtime/` 中做适配。
+
 ## 来源与架构
 
 基于 [design-dna](https://github.com/zanwei/design-dna) 扩展。Phase 1（结构）和 Phase 2（分析）完全复用 design-dna skill 原始实现，Phase 3 重写为 **DNA 数据驱动转换方案** — 将 DNA JSON 映射为 Cocos Creator 原生组件，通过 MCP 工具自动生成 Prefab。
@@ -70,6 +79,28 @@ Phase 1: 结构          Phase 2: 分析          Phase 3: 生成（Cocos 转换
 6. **输出文档 + 代码** — 见下方「产出物清单」
 7. **MCP 创建 Prefab** — 按 MCP 调用序列自动创建节点树
 8. **验证** — 按验证清单自检，见 → [references/output-spec.md](references/output-spec.md)
+
+### ⚠️ MCP 降级策略
+
+当 MCP Server 不可用时（连接超时、未启动、端口占用等），**不应阻塞整个 Phase 3 流程**。按以下降级方案输出：
+
+| 降级级别 | 条件 | 输出 |
+|---------|------|------|
+| **L1 完整模式** | MCP 正常连通 | design.md + PageComp.ts + Renderer.ts + MCP 自动生成 Prefab |
+| **L2 文档模式** | MCP 不可用 | design.md + PageComp.ts + Renderer.ts + **Prefab 节点树定义文档**（第4章详细到可手动创建） |
+| **L3 最小模式** | MCP 不可用且缺少模板信息 | design.md（9章完整） |
+
+**降级时的 Agent 行为**：
+
+1. 在输出开头明确标注：`⚠️ MCP Server 未连通，已降级到 L2 文档模式`
+2. 输出 MCP 启动指引：
+   ```
+   请在终端启动 Cocos MCP Server：
+   node <cocos-cli-path>/dist/cli.js start-mcp-server
+   启动后可重新执行 Prefab 创建步骤。
+   ```
+3. design.md 第4章节点树写到**可直接在 Cocos Creator 编辑器中手动创建**的精度（含每个节点的组件类型、属性值、锚点、尺寸）
+4. 所有代码文件（PageComp.ts / Renderer.ts）正常输出，不依赖 MCP
 
 ---
 
@@ -187,6 +218,31 @@ Phase 1: 结构          Phase 2: 分析          Phase 3: 生成（Cocos 转换
 | `examples/_example-page/`（skill 目录下） | 完整页面目录结构示例（design.md 9章 + asset-manifest + references + art-prompts） | 理解输出格式、新页面目录结构 |
 | [cocos-constraints.md](references/cocos-constraints.md) | Cocos 技术栈禁止清单与约束 | 代码生成/任务规划时自检 |
 | [validate-workflow.md](references/validate-workflow.md) | V1-V4 验证规范（设计文档/Prefab/代码/测试） | Phase 3 完成后自动验证 |
+| [runtime-integration.md](references/runtime-integration.md) | Runtime 集成规范（ResourceManager/LayerManager 同步与改造指南） | Phase 3 代码生成、runtime 集成 |
+
+## Runtime 模板
+
+cocos-dna 提供通用运行时基础设施模板，由 skill 统一维护，通过 `sync-runtime.js` 同步到项目。
+
+| 模板文件 | 版本 | 职责 |
+|---------|------|------|
+| [`templates/runtime/ResourceManager.ts`](templates/runtime/ResourceManager.ts) | 1.0.0 | 统一资源加载/缓存/分组释放（解决 resources.load 散落 + 零 release 问题） |
+| [`templates/runtime/LayerManager.ts`](templates/runtime/LayerManager.ts) | 1.0.0 | UI 层级隔离：page / popup / effect / guide |
+
+### Agent 自动集成时机
+
+- **Phase 3 首次执行**：检查项目 `assets/scripts/runtime/` 是否缺少 runtime 文件，缺少则自动同步
+- **新项目初始化**：完整流程（Phase 1 → 2 → 3）时自动同步
+- **用户显式请求**："同步 runtime"、"更新 runtime 模板"
+
+### 什么放 skill，什么放项目
+
+| 判断标准 | 归属 |
+|---------|------|
+| 能直接在另一个 Cocos DNA 项目里用 | → skill `templates/` |
+| 绑定项目视觉风格/游戏流/业务逻辑 | → 项目 `assets/scripts/` |
+
+详细集成步骤见 → [runtime-integration.md](references/runtime-integration.md)
 
 ## 可执行脚本
 
@@ -195,5 +251,6 @@ Phase 1: 结构          Phase 2: 分析          Phase 3: 生成（Cocos 转换
 | [scripts/mcp-client.js](scripts/mcp-client.js) | 通用 MCP 通信层 — 场景/节点/组件/Prefab 操作 API | `require()` 或 `node scripts/mcp-client.js [port]` 测试连通性 |
 | [scripts/resolve-asset-uuids.js](scripts/resolve-asset-uuids.js) | 解析 .meta → UUID，写回 asset-manifest.json | `node scripts/resolve-asset-uuids.js --project <path>` |
 | [scripts/ui-dev-workflow.js](scripts/ui-dev-workflow.js) | V1-V4 验证引擎（通用，不含项目硬编码） | `node scripts/ui-dev-workflow.js --project <path> <ui-name>` |
+| [scripts/sync-runtime.js](scripts/sync-runtime.js) | Runtime 模板同步工具 — 将 templates/runtime/ 同步到项目 scripts/runtime/ | `node scripts/sync-runtime.js --project <path> --apply` |
 
 > **重要**：Agent 在 Cocos Creator 项目中工作时，必须遵守 [cocos-constraints.md](references/cocos-constraints.md) 中的全部约束。核心规则：运行时代码中禁止使用 HTML/CSS/DOM/Web 框架，必须使用 Cocos 原生 API 和组件。

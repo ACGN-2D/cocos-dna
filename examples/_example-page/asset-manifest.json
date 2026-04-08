@@ -2,14 +2,34 @@
   "_comment": "格式示例 — 实际值必须来自项目资源，禁止直接复制",
   "assets": [
     {
-      "assetPath": "assets/resources/textures/<page>/<bg_name>",
+      "id": "bg_example",
+      "assetPath": "assets/textures/pages/<page>/bg_example.png",
       "loadType": "static",
-      "sourceFile": "<bg_name>.png"
+      "ownership": "page",
+      "sourceFile": "cocos-dna/components/<page>/assets/raw/bg_example_raw.png"
     },
     {
-      "assetPath": "assets/resources/textures/<page>/<icon_name>",
+      "id": "btn_primary_bg",
+      "assetPath": "assets/textures/common/buttons/btn_primary_bg.png",
+      "loadType": "static",
+      "ownership": "common",
+      "sourceFile": null,
+      "_note": "全局通用按钮，@property 静态引用，不进 resources"
+    },
+    {
+      "id": "card_bg_attack",
+      "assetPath": "assets/resources/textures/pages/<page>/card_bg_attack.png",
       "loadType": "dynamic",
-      "sourceFile": "<icon_name>.png"
+      "ownership": "page",
+      "sourceFile": "cocos-dna/components/<page>/assets/raw/card_bg_attack_raw.png"
+    },
+    {
+      "id": "char_portrait",
+      "assetPath": "assets/resources/textures/characters/${characterId}.png",
+      "loadType": "dynamic",
+      "ownership": "entity-type",
+      "sourceFile": null,
+      "_note": "按角色 ID 动态拼接路径加载，必须放 resources"
     }
   ]
 }

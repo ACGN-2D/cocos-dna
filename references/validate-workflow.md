@@ -34,10 +34,10 @@
 | 第7章 | "交互逻辑" | ✅ |
 | 第8章 | "动态效果", "动画效果" | ⚠️ 可选 |
 
-### 项目标准检查
-- **SteamColors 配色**：文档中应出现 `#C4A962` 或其他 SteamColors 色值
-- **设计分辨率**：文档中应出现 `1280` 和 `720`（本项目标准分辨率）
-- **双语支持**：UI 文本元素应标注 i18n key
+### 项目设计系统一致性检查
+- **配色引用**：文档中的色值应与项目 `cocos-dna/design-dna.json` 中 `design_system.color` 的定义一致
+- **设计分辨率**：文档中应出现项目设定的设计分辨率（从 `design-dna.json` 或 `RendererConfig` 读取）
+- **双语支持**：UI 文本元素应标注 i18n key（如项目启用了 i18n）
 
 ---
 
@@ -51,16 +51,11 @@
 2. **UITransform**：根节点必须有 `cc.UITransform` 组件
 3. **PageComp 挂载**：根节点必须挂载对应的 `<Page>PageComp` 组件
 
-### 各 UI 必需节点
+### 必需节点验证
 
-```json
-{
-  "main-menu": ["BG", "GameTitle", "StartBtn"],
-  "char-select": ["BG", "CharacterList", "ConfirmBtn"],
-  "route-map": ["BG", "MapContainer"],
-  "battle": ["BG", "TopStatusBar", "PlayerArea", "EnemyContainer", "EnergyOrb", "EndTurnBtn", "BottomBar"]
-}
-```
+每个界面的 Prefab 必需节点由 `cocos-dna/components/<page>/design.md` 第4章节点树定义。验证时从该文档提取节点列表，逐一检查 `.prefab` JSON 中是否包含对应 `"_name"` 字段。
+
+> **注意**：此处不硬编码具体页面的节点列表，所有节点需求以各页面 `design.md` 为准。
 
 ---
 
@@ -73,13 +68,11 @@
 
 ### Renderer 检查（`assets/scripts/views/<Page>Renderer.ts`）
 - 继承 `BaseRenderer`
-- 包含 `_tryLoadPrefab` 方法
-- 包含 `_setupPrefabUI` 方法
-- 包含 `_bindPrefabEvents` 方法
-- 使用 `resources.load` 异步加载 Prefab
-- 维护 `_prefabReady` 状态标记
-- 使用 `I18n.t()` 获取文本
-- 使用 `SteamColors` 常量
+- 包含 `onInit()` 方法（Prefab 加载 + UI 初始化）
+- 包含 `onShow()` 方法（进场动画 + 数据绑定）
+- 使用 `loadPrefab()` / `ResourceManager.load()` 异步加载资源
+- 使用项目配色常量（通过 `BaseRenderer.config.colors` 或兼容导出访问）
+- 使用 `I18n.t()` 获取文本（如项目启用了 i18n）
 
 ---
 
