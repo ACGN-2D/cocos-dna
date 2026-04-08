@@ -110,7 +110,7 @@ design-dna.json ──→ 映射表 ──→ 节点树定义 ──→ MCP 命�
 3. **绑定资源** — 两种绑定方式（由 asset-manifest.json 的 `loadType` 决定）：
    - **静态资源** (`loadType: "static"`)：资源放 `assets/textures/<page>/`，在 Prefab JSON 的 PageComp 序列化数据中添加 `@property(SpriteFrame)` 属性，直接引用 `spriteFrameUuid`（`<uuid>@f9941`）。构建器自动依赖追踪
    - **动态资源** (`loadType: "dynamic"`, 默认)：资源放 `assets/resources/textures/<page>/`，Renderer 代码中 `resources.load()` 加载。asset-manifest.json 记录 UUID 映射
-   - **原资产追溯**：AI 生成的原始图片存放在 `design-dna/components/<page>/assets/raw/`，asset-manifest.json 的 `sourceFile` 字段记录原资产路径，建立设计产物→正式资产的可追溯链
+   - **原资产追溯**：AI 生成的原始图片存放在 `cocos-dna/components/<page>/assets/raw/`，asset-manifest.json 的 `sourceFile` 字段记录原资产路径，建立设计产物→正式资产的可追溯链
 4. **挂载脚本** — MCP `add-component` 在根节点挂载 `PageComp.ts`，关联 `@property` 引用
 5. **保存 Prefab** — MCP `save-prefab` → `assets/resources/prefabs/<page-name>.prefab`
 
@@ -262,4 +262,4 @@ design-dna.json → color.* → COLORS.* (ThemeConfig.ts)
                 → motion.* → MOTION.*
 ```
 
-**design-dna.json 是唯一真相源 (SSOT)**，ThemeConfig.ts 是运行时读取层，两者必须同步。
+**cocos-dna/design-dna.json 是全局设计 token 的唯一真相源 (SSOT)**，仅包含 `design_system`/`design_style`/`visual_effects`/`cocos_dna_extensions` 四大全局块和 `pages` 轻量索引。页面级设计数据存在 `cocos-dna/components/<page>/design.md` 中，**不得**写入 design-dna.json。ThemeConfig.ts 是运行时读取层，与全局 token 必须同步。

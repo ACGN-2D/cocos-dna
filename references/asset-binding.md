@@ -4,7 +4,7 @@
 
 ## asset-manifest.json
 
-每个界面生成 `design-dna/components/<page-name>/asset-manifest.json`。
+每个界面生成 `cocos-dna/components/<page-name>/asset-manifest.json`。
 
 ### 顶层结构
 
@@ -30,7 +30,7 @@
   "type": "sprite-frame",
   "status": "missing",
   "loadType": "dynamic",
-  "sourceFile": "design-dna/components/<page-name>/assets/raw/icon_gear_deco_s_raw.png",
+  "sourceFile": "cocos-dna/components/<page-name>/assets/raw/icon_gear_deco_s_raw.png",
   "uuid": null,
   "spriteFrameUuid": null,
   "meta": {
@@ -58,7 +58,7 @@
 | `meta` | - | 尺寸、格式、九宫格信息 |
 | `boundToNodes` | - | Prefab 中引用此资源的节点路径数组 |
 | `loadType` | - | 加载方式: `static`（@property 绑定，放 assets/textures/）/ `dynamic`（resources.load，放 assets/resources/textures/）。默认 `dynamic` |
-| `sourceFile` | - | AI 生成的原始资产路径（相对项目根），如 `design-dna/components/<page>/assets/raw/xxx_raw.png`。null 表示直接手工制作或代码生成。原图可能需要去背景等后处理 |
+| `sourceFile` | - | AI 生成的原始资产路径（相对项目根），如 `cocos-dna/components/<page>/assets/raw/xxx_raw.png`。null 表示直接手工制作或代码生成。原图可能需要去背景等后处理 |
 
 ---
 
@@ -86,14 +86,14 @@ size_mismatch ← exists/ready（尺寸校验失败时回退到此状态）
 ```
 AI 绘图          原资产存放              放入正式目录                Cocos 集成
 ┌──────────┐   ┌──────────────────┐   ┌────────────────────────┐   ┌──────────────────┐
-│art-prompts│→ │design-dna/       │→ │复制到 assetPath 指向的  │→ │.meta 自动生成     │
+│art-prompts│→ │cocos-dna/        │→ │复制到 assetPath 指向的  │→ │.meta 自动生成     │
 │.md 生成   │   │components/<page>/│   │目录（由 loadType 决定）│   │resolve-asset-uuids│
 │(含尺寸)   │   │assets/raw/       │   │static → assets/textures/│   │→ status=ready     │
 │           │   │  xxx_raw.png     │   │dynamic→ assets/resources/│  │→ MCP/Prefab 绑定  │
 └──────────┘   └──────────────────┘   └────────────────────────┘   └──────────────────┘
 ```
 
-- **原资产目录** `design-dna/components/<page>/assets/raw/` — 保存 AI 生成的原始图片，不参与 Cocos 构建
+- **原资产目录** `cocos-dna/components/<page>/assets/raw/` — 保存 AI 生成的原始图片，不参与 Cocos 构建
 - `sourceFile` 字段记录原资产路径，建立设计产物→最终资产的可追溯关联。原图可能需要去背景等后处理后再放入正式目录
 - `assetPath` 的目录由 `loadType` 决定（需要目录时用 `path.dirname(assetPath)`）：
   - `static` → `assets/textures/<page>/xxx.png`（Prefab @property 绑定，构建器自动依赖追踪）
@@ -189,7 +189,7 @@ assets/resources/textures/          ← 动态加载资源（resources.load()）
 
 ## JSON Schema
 
-完整的 JSON Schema 定义应放在项目级 `design-dna/asset-manifest.schema.json` 中。
+完整的 JSON Schema 定义应放在项目级 `cocos-dna/asset-manifest.schema.json` 中。
 
 关键约束：
 - `version` 固定为 `"1.0.0"` 或 `"1.1.0"`
@@ -197,5 +197,5 @@ assets/resources/textures/          ← 动态加载资源（resources.load()）
 - `type` 枚举：`sprite-frame | texture | spine | particle`
 - `status` 枚举：`missing | exists | ready | deprecated | size_mismatch`
 - `loadType` 枚举：`static | dynamic`（默认 `dynamic`）
-- `sourceFile`：字符串或 null，指向 `design-dna/components/<page>/assets/raw/` 下的原始资产
+- `sourceFile`：字符串或 null，指向 `cocos-dna/components/<page>/assets/raw/` 下的原始资产
 - `meta.size`：`{ w, h }` 为预设尺寸（必填），`resolve-asset-uuids.js` 直接从 Cocos `.meta` 文件的 `subMetas.f9941.userData.rawWidth/rawHeight` 读取实际像素尺寸进行校验（零额外 I/O），不符则标记 `size_mismatch`

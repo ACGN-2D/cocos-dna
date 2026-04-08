@@ -1,0 +1,15 @@
+{
+  "_comment": "格式示例 — 实际值必须来自项目资源，禁止直接复制",
+  "assets": [
+    {
+      "assetPath": "assets/resources/textures/<page>/<bg_name>",
+      "loadType": "static",
+      "sourceFile": "<bg_name>.png"
+    },
+    {
+      "assetPath": "assets/resources/textures/<page>/<icon_name>",
+      "loadType": "dynamic",
+      "sourceFile": "<icon_name>.png"
+    }
+  ]
+}

@@ -21,7 +21,7 @@
 
 - **参考图列表** — 表格：缩略引用、文件名、设计影响
 - **设计决策追踪** — 表格：每个重要设计决策 → 来源参考 → 理由
-- 参考图存放路径：`design-dna/components/<page-name>/references/`
+- 参考图存放路径：`cocos-dna/components/<page-name>/references/`
 - 后续截图存档命名：`screenshot-{日期}_{描述}.png`
 
 ### 第2章：整体布局（ASCII 线框图）
@@ -241,11 +241,16 @@ interface BackgroundEffectSpec {
 - [ ] 按钮文字预留不同长度空间
 
 ### Phase 3 DNA 驱动验证
-- [ ] 每个颜色值可追溯到 `design-dna.json` → `color.*`
-- [ ] 每个字号可追溯到 `design-dna.json` → `typography.type_scale.*`
-- [ ] 每个动画参数可追溯到 `design-dna.json` → `motion.*`
+- [ ] 每个颜色值可追溯到 `cocos-dna/design-dna.json` → `color.*`
+- [ ] 每个字号可追溯到 `cocos-dna/design-dna.json` → `typography.type_scale.*`
+- [ ] 每个动画参数可追溯到 `cocos-dna/design-dna.json` → `motion.*`
 - [ ] 代码注释中标注了 DNA 来源字段
 - [ ] PageComp.ts 的 @property 覆盖节点树中所有需要运行时访问的节点
 - [ ] Renderer.ts 的 COLORS/MOTION 常量与 ThemeConfig.ts 一致
 - [ ] MCP 调用序列覆盖节点树中的所有节点
 - [ ] Prefab 文件已保存到正确路径
+
+### 数据边界验证
+- [ ] **design-dna.json 未被写入页面级详情数据**（layout/components/animations/particles 等），仅含全局 token + pages 索引
+- [ ] 页面设计数据完整写入 `cocos-dna/components/<page>/design.md`
+- [ ] pages 索引中已添加新页面条目（page_name_cn + status + design_doc 路径）

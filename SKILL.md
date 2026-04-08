@@ -20,7 +20,7 @@ description: >-
 
 cocos-dna 依赖 design-dna skill。如未安装，引导用户安装：`https://github.com/zanwei/design-dna`
 
-> **项目隔离原则**：本技能是通用规范，不包含任何特定项目的设计内容。所有项目特定的设计系统来自各项目自己的 `design-dna/design-dna.json`。
+> **项目隔离原则**：本技能是通用规范，不包含任何特定项目的设计内容。所有项目特定的设计系统来自各项目自己的 `cocos-dna/design-dna.json`。
 
 ---
 
@@ -54,7 +54,7 @@ Phase 1: 结构          Phase 2: 分析          Phase 3: 生成（Cocos 转换
 1. 从用户提供的参考图/截图/URL 中逐字段提取或推断值
 2. 输出完整 DNA JSON — **每字段必须填充**
 3. **必须询问**：*"需要在进入生成阶段前调整任何值吗？"*
-4. 用户确认后保存为 `design-dna/design-dna.json`
+4. 用户确认后保存为 `cocos-dna/design-dna.json`
 
 ## Phase 3: 生成 — DNA 数据驱动转换 `🎮 cocos-dna 核心`
 
@@ -62,7 +62,7 @@ Phase 1: 结构          Phase 2: 分析          Phase 3: 生成（Cocos 转换
 
 ### 执行步骤
 
-1. **读取设计约束** — 读取 `design-dna.json`（SSOT）+ 已有 components/ 文档作为风格基线
+1. **读取设计约束** — 读取 `cocos-dna/design-dna.json`（SSOT）+ 已有 components/ 文档作为风格基线
 2. **确认输入** — 页面名称（英文+中文）、设计分辨率、UI 参考图
 3. **分析图片 → 匹配 DNA** — 将图片元素匹配到 DNA 的颜色、字体、间距等
 4. **⚠️ 询问动态效果（不可跳过）** — 见下方「动态效果确认」
@@ -83,7 +83,7 @@ Phase 1: 结构          Phase 2: 分析          Phase 3: 生成（Cocos 转换
 
 | 选填项 | 默认值 |
 |--------|--------|
-| 设计分辨率 | 从项目 design-dna.json 读取，或默认 1920×1080 |
+| 设计分辨率 | 从项目 cocos-dna/design-dna.json 读取，或默认 1920×1080 |
 | 额外交互说明 | 从图片推断 |
 
 ### ⚡ 动态效果确认（重要）
@@ -104,10 +104,10 @@ Phase 1: 结构          Phase 2: 分析          Phase 3: 生成（Cocos 转换
 
 | # | 产物 | 路径 | 说明 |
 |---|------|------|------|
-| 1 | Design DNA JSON | `design-dna/design-dna.json` | 唯一真相源 (SSOT) |
-| 2 | UI 结构协议文档 | `design-dna/components/<page>/design.md` | 9章 Markdown（含第1.5章） |
-| 3 | 资产绑定清单 | `design-dna/components/<page>/asset-manifest.json` | Sprite UUID 映射 |
-| 4 | AI 绘图 Prompt | `design-dna/components/<page>/assets/art-prompts.md` | 美术资源生成指引，产出放 `assets/raw/` |
+| 1 | Design DNA JSON | `cocos-dna/design-dna.json` | **全局设计 token SSOT**（色彩/字体/间距/动效/风格）+ 页面轻量索引。**禁止**在此存储页面级设计详情 |
+| 2 | UI 结构协议文档 | `cocos-dna/components/<page>/design.md` | 9章 Markdown（含第1.5章），页面设计数据的唯一存储位置 |
+| 3 | 资产绑定清单 | `cocos-dna/components/<page>/asset-manifest.json` | Sprite UUID 映射 |
+| 4 | AI 绘图 Prompt | `cocos-dna/components/<page>/assets/art-prompts.md` | 美术资源生成指引，产出放 `assets/raw/` |
 | 5 | Prefab 组件脚本 | `assets/scripts/ui/<page>/<Page>Comp.ts` | @property 声明 |
 | 6 | 渲染器脚本 | `assets/scripts/ui/<page>/<Page>Renderer.ts` | DNA 驱动逻辑 |
 | 7 | Prefab 文件 | `assets/resources/prefabs/<page>.prefab` | MCP 自动创建 |
@@ -132,16 +132,16 @@ Phase 1: 结构          Phase 2: 分析          Phase 3: 生成（Cocos 转换
 
 ## 项目设计系统
 
-每个项目在 `design-dna/` 目录下维护自己的设计系统：
+每个项目在 `cocos-dna/` 目录下维护自己的设计系统：
 
 ```
-<project-root>/design-dna/
-├── design-dna.json          ← SSOT
+<project-root>/cocos-dna/
+├── design-dna.json          ← 全局 SSOT（仅含 design_system / design_style / visual_effects / cocos_dna_extensions + 页面索引）
 ├── design-tokens.css        ← CSS 变量辅助预览
 ├── asset-manifest.schema.json
-├── components/
+├── components/              ← 各 UI 页面的设计数据
 │   ├── <page-name>/
-│   │   ├── design.md
+│   │   ├── design.md        ← 页面级设计数据的唯一存储位置（9 章）
 │   │   ├── asset-manifest.json
 │   │   ├── assets/
 │   │   │   ├── art-prompts.md    ← AI 绘图 Prompt
@@ -149,10 +149,29 @@ Phase 1: 结构          Phase 2: 分析          Phase 3: 生成（Cocos 转换
 │   │   └── references/
 │   └── ...
 └── README.md
+
+# examples 目录位于 skill 本身（不在项目产物 cocos-dna/ 下）：
+.codebuddy/skills/cocos-dna/examples/
+├── README.md                ← 索引说明 + 数据边界 + 新建流程
+└── _example-page/           ← 模拟完整页面目录
+    ├── design.md            ← design.md 9 章完整格式模板
+    ├── asset-manifest.json
+    ├── references/README.md
+    └── assets/art-prompts.md
 ```
 
-- **无 design-dna.json**：先从参考图提取设计系统（Phase 1→2），生成后再进入 UI 分析
-- **已有 design-dna.json**：读取作为设计约束，新界面必须与已有系统保持一致
+### design-dna.json 数据边界
+
+> ⚠️ **关键规则**：`design-dna.json` **只保存全局设计 token**（`design_system`、`design_style`、`visual_effects`、`cocos_dna_extensions`）和一个 **pages 轻量索引**（仅含 `page_name_cn`、`status`、`design_doc` 路径）。
+>
+> **禁止**在 `design-dna.json` 的 `pages` 中写入页面的 layout、components、animations、particles 等详细设计数据。这些数据**必须且只能**写在对应的 `cocos-dna/components/<page>/design.md` 中。
+>
+> 新增 UI 页面时：
+> 1. 在 `pages` 索引中添加一行轻量条目
+> 2. 在 `cocos-dna/components/<page>/design.md` 中编写完整的 9 章设计文档
+
+- **无 cocos-dna/design-dna.json**：先从参考图提取设计系统（Phase 1→2），生成后再进入 UI 分析
+- **已有 cocos-dna/design-dna.json**：读取全局 token 作为设计约束，新界面必须与已有系统保持一致
 
 ---
 
@@ -165,7 +184,7 @@ Phase 1: 结构          Phase 2: 分析          Phase 3: 生成（Cocos 转换
 | [output-spec.md](references/output-spec.md) | design.md 9章详细定义（含第1.5章）+ 动效接口 + 验证清单 | Phase 3 编写 design.md、最终验证 |
 | [node-spec.md](references/node-spec.md) | 节点命名规范、节点信息格式 | Phase 3 构建第4/6章节点树 |
 | [asset-binding.md](references/asset-binding.md) | 资产绑定协议、Schema、状态机、**静态 vs 动态资源目录决策** | Phase 3 生成第6.5章 |
-| [example-design.md](references/example-design.md) | 全 9 章格式示例（含第1.5章溯源、Cocos API 交互状态） | 理解输出格式 |
+| `examples/_example-page/`（skill 目录下） | 完整页面目录结构示例（design.md 9章 + asset-manifest + references + art-prompts） | 理解输出格式、新页面目录结构 |
 | [cocos-constraints.md](references/cocos-constraints.md) | Cocos 技术栈禁止清单与约束 | 代码生成/任务规划时自检 |
 | [validate-workflow.md](references/validate-workflow.md) | V1-V4 验证规范（设计文档/Prefab/代码/测试） | Phase 3 完成后自动验证 |
 

@@ -1,8 +1,8 @@
 # Design DNA Schema（设计系统三维度 JSON 结构）
 
-项目的设计系统以 `design-dna.json` 存储，包含三个维度。以下是完整的字段清单。
+项目的设计系统以 `cocos-dna/design-dna.json` 存储，包含三个维度。以下是完整的字段清单。
 
-首次为项目生成 design-dna.json 时，从用户提供的参考图中提取所有字段值。
+首次为项目生成 cocos-dna/design-dna.json 时，从用户提供的参考图中提取所有字段值。
 每个字段都必须填充，不允许空字符串。
 
 ## 顶层结构

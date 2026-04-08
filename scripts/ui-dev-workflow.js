@@ -11,7 +11,7 @@
  *   node ui-dev-workflow.js --project <project-root> <ui-name> [--phase=1|2|3|4]
  *   node ui-dev-workflow.js --project <project-root> --all
  * 
- * 如果不提供 --project，自动从 CWD 向上查找含 design-dna/ 的目录。
+ * 如果不提供 --project，自动从 CWD 向上查找含 cocos-dna/ 的目录。
  */
 
 const fs = require('fs');
@@ -22,7 +22,7 @@ const path = require('path');
 function findProjectRoot(startDir) {
     let dir = startDir || process.cwd();
     while (dir !== path.dirname(dir)) {
-        if (fs.existsSync(path.join(dir, 'design-dna'))) return dir;
+        if (fs.existsSync(path.join(dir, 'cocos-dna'))) return dir;
         dir = path.dirname(dir);
     }
     return null;
@@ -48,7 +48,7 @@ function getNames(uiName) {
 function validateDesignDoc(projectRoot, uiName) {
     console.log(`\n📋 V1: 验证设计文档 - ${uiName}`);
 
-    const designFile = path.join(projectRoot, 'design-dna', 'components', uiName, 'design.md');
+    const designFile = path.join(projectRoot, 'cocos-dna', 'components', uiName, 'design.md');
 
     if (!fs.existsSync(designFile)) {
         console.error(`  ❌ 设计文档不存在: ${designFile}`);
@@ -87,7 +87,7 @@ function validateDesignDoc(projectRoot, uiName) {
     });
 
     // 检查 asset-manifest.json 是否存在
-    const manifestPath = path.join(projectRoot, 'design-dna', 'components', uiName, 'asset-manifest.json');
+    const manifestPath = path.join(projectRoot, 'cocos-dna', 'components', uiName, 'asset-manifest.json');
     if (!fs.existsSync(manifestPath)) {
         warnings.push('asset-manifest.json 不存在');
     }
@@ -125,7 +125,7 @@ function validatePrefab(projectRoot, uiName) {
     }
 
     // 尝试从 design.md 第4章提取节点名，与 Prefab 交叉验证
-    const designFile = path.join(projectRoot, 'design-dna', 'components', uiName, 'design.md');
+    const designFile = path.join(projectRoot, 'cocos-dna', 'components', uiName, 'design.md');
     if (fs.existsSync(designFile)) {
         const designContent = fs.readFileSync(designFile, 'utf-8');
         // 提取类似 `BG [Sprite]` 或 `| BG |` 的节点名
@@ -336,9 +336,9 @@ function main() {
     }
 
     if (scanAll) {
-        const designDnaDir = path.join(projectRoot, 'design-dna', 'components');
+        const designDnaDir = path.join(projectRoot, 'cocos-dna', 'components');
         if (!fs.existsSync(designDnaDir)) {
-            console.error('❌ design-dna/components/ 不存在');
+            console.error('❌ cocos-dna/components/ 不存在');
             process.exit(1);
         }
         const pages = fs.readdirSync(designDnaDir, { withFileTypes: true })

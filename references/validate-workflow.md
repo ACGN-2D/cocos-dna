@@ -18,7 +18,7 @@
 ## V1: 设计文档验证
 
 ### 检查路径
-`design-dna/components/<page>/design.md`
+`cocos-dna/components/<page>/design.md`
 
 ### 必需章节
 | 章节 | 关键词（任一匹配即可） | 必填 |

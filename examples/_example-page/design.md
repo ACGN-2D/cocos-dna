@@ -1,12 +1,16 @@
-# 格式示例：UI 结构协议文档
+# 格式示例：UI 结构协议文档（design.md）
 
-> ⚠️ **本文件仅展示文档格式，不代表任何真实项目。**
+> ⚠️ **本文件仅展示 `cocos-dna/components/<page>/design.md` 的标准格式，不代表任何真实项目。**
 > 所有颜色值、节点名、文本内容均为**占位符示例**，Agent 使用本技能时**禁止**直接复制这些值。
-> 实际项目的设计参数必须来自该项目自己的 `design-dna.json` 和用户提供的参考图。
+> 实际项目的设计参数必须来自该项目的 `design-dna.json`（全局 token）和用户提供的参考图。
+>
+> **数据边界**：`design.md` 是每个 UI 页面设计数据的**唯一存储位置**。
+> 页面的 layout、components、animations、particles 等详细设计数据**只写在此文档中**，
+> **不得**写入 `design-dna.json`（后者仅含全局 token + 页面轻量索引）。
 
 ---
 
-## 第1章示例：设计概述
+## 第1章：设计概述
 
 **页面名称**：`<page-name>`（中文：<中文页面名>）
 **页面定位**：<页面在游戏流中的功能定位描述>
@@ -16,8 +20,9 @@
 **状态**：🔨 设计中
 **设计分辨率**：<宽> × <高>（横屏，原点在屏幕中心）
 **设计依据**：
-- `design-dna/design-dna.json` — 项目级设计系统 SSOT
-- <其他参考来源>
+- `cocos-dna/design-dna.json` — 全局设计 token SSOT（色彩/字体/间距/动效/风格）
+- 本文档 — 页面级设计数据的唯一存储位置
+- <其他参考来源（参考图等）>
 
 **设计原则**：
 1. **<原则1>** — <说明>
@@ -26,9 +31,9 @@
 
 ---
 
-## 第1.5章示例：参考图与设计溯源
+## 第1.5章：参考图与设计溯源
 
-> 📁 参考图存放路径：`design-dna/components/<page-name>/references/`
+> 📁 参考图存放路径：`cocos-dna/components/<page-name>/references/`
 
 ### 参考图列表
 
@@ -46,7 +51,7 @@
 
 ---
 
-## 第2章示例：整体布局（ASCII 线框图）
+## 第2章：整体布局（ASCII 线框图）
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -77,7 +82,7 @@
 
 ---
 
-## 第3章示例：视觉规范
+## 第3章：视觉规范
 
 ### 3.1 色彩规范
 
@@ -114,7 +119,7 @@
 
 ---
 
-## 第4章示例：Cocos 节点树
+## 第4章：Cocos 节点树
 
 > **Prefab 路径**：`assets/resources/prefabs/pages/<PageName>Page.prefab`
 > **组件脚本**：`<PageName>PageComp.ts`（挂载到根节点）
@@ -188,16 +193,16 @@
 
 ---
 
-## 第5章示例：元素设计详述
+## 第5章：元素设计详述
 
 使用 Cocos API 伪代码格式（**禁止 CSS 属性**）：
 
 ```typescript
-// 所有颜色值必须来自项目的 design-dna.json，以下为格式示例
+// 全局色彩 token 来自 design-dna.json，页面级组件状态在本 design.md 定义
 primaryButtonStates: {
   default: {
-    bgColor: '<design-dna.json → color.primary.hex>',    // Sprite.color
-    labelColor: '<design-dna.json → color.accent.hex>',   // Label.color
+    bgColor: '<design-dna.json → color.primary.hex>',    // Sprite.color（引用全局 token）
+    labelColor: '<design-dna.json → color.accent.hex>',   // Label.color（引用全局 token）
     scale: new Vec3(1, 1, 1),                              // Node.scale
   },
   hover: {
@@ -222,7 +227,42 @@ primaryButtonStates: {
 
 ---
 
-## 第7章示例：入场动画序列与页面跳转
+## 第6章：资源清单与 @property 映射表
+
+### 6.1 @property 映射表
+
+> **组件脚本**：`<PageName>PageComp.ts`，挂载到 Prefab 根节点 `<PageName>Page`。
+> 下表列出所有需要运行时访问的节点 → @property 声明。
+
+| @property 名称 | 类型 | 对应节点路径 | 用途 |
+|---------------|------|-------------|------|
+| `titleLabel` | `Label` | `TitleGroup/GameTitle` | 主标题文字更新 |
+| `subtitleLabel` | `Label` | `TitleGroup/GameSubtitle` | 副标题文字更新 |
+| `primaryBtn` | `Node` | `ButtonGroup/PrimaryBtn` | 主按钮交互绑定 |
+| `secondaryBtn` | `Node` | `ButtonGroup/SecondaryBtn` | 次要按钮交互绑定 |
+| `bgSprite` | `Sprite` | `BG` | 背景图片/颜色控制 |
+| `versionLabel` | `Label` | `VersionLabel` | 版本号动态更新 |
+
+### 6.2 静态 vs 动态资源决策
+
+| 资源 | 加载方式 | 理由 |
+|------|---------|------|
+| 背景图 `<bg>.png` | 静态（Prefab 内嵌） | 常驻显示，不需要运行时切换 |
+| 装饰齿轮 `<gear>.png` | 静态（Prefab 内嵌） | 固定装饰元素 |
+| 按钮图标（如有） | 动态（`resources/` 加载） | 可能按状态/配置切换 |
+
+### 6.3 资源文件清单
+
+> 对应 `asset-manifest.json`，列出本页面使用的所有资源。
+
+| 资源名 | 路径 | 类型 | 加载方式 |
+|--------|------|------|---------|
+| `<bg_name>` | `assets/resources/textures/<page>/` | SpriteFrame | static |
+| `<icon_name>` | `assets/resources/textures/<page>/` | SpriteFrame | dynamic |
+
+---
+
+## 第7章：入场动画序列与页面跳转
 
 ### 入场动画序列
 
@@ -243,7 +283,7 @@ primaryButtonStates: {
 
 ---
 
-## 第8章示例：动态效果规范
+## 第8章：动态效果规范
 
 ### 8.1 动态效果总表
 
@@ -287,11 +327,13 @@ const animExample = {
 
 这只是**格式示例**。实际输出时：
 
-1. **所有颜色值** 必须来自项目的 `design-dna.json`，不得使用本示例中的占位符
-2. **所有节点名** 必须根据实际项目界面内容命名
-3. **所有文本内容** 必须来自用户需求和参考图分析
-4. **所有尺寸/位置** 必须基于项目的设计分辨率计算
-5. **所有动态效果** 必须经过用户确认后才写入第8章
-6. **不同项目风格各异** — 不要假设游戏类型、视觉风格或交互模式
-7. **每个颜色/尺寸注释** 必须标注 DNA 来源字段（如 `← DNA: color.primary`）
-8. **交互状态** 必须使用 Cocos API（Node.scale / Node.opacity / tween），**禁止 CSS 属性**
+1. **全局色彩/字体/动效 token** 必须引用项目的 `cocos-dna/design-dna.json`，不得使用本示例中的占位符
+2. **页面级设计数据**（layout、components、animations、particles）只写在本 `design.md` 中，**不得写入** `design-dna.json`
+3. **所有节点名** 必须根据实际项目界面内容命名
+4. **所有文本内容** 必须来自用户需求和参考图分析
+5. **所有尺寸/位置** 必须基于项目的设计分辨率计算
+6. **所有动态效果** 必须经过用户确认后才写入第8章
+7. **不同项目风格各异** — 不要假设游戏类型、视觉风格或交互模式
+8. **每个颜色/尺寸注释** 必须标注 DNA 来源字段（如 `← DNA: color.primary`）
+9. **交互状态** 必须使用 Cocos API（Node.scale / Node.opacity / tween），**禁止 CSS 属性**
+10. **新增页面时** 只需在 `design-dna.json` 的 `pages` 索引中加一行轻量条目（page_name_cn + status + design_doc），完整设计在此文档中编写

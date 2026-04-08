@@ -1,7 +1,7 @@
 /**
  * resolve-asset-uuids.js — 通用 Cocos Creator 资产 UUID 解析工具
  * 
- * 连接 design-dna asset-manifest.json 与 Cocos .meta 文件的桥梁。
+ * 连接 cocos-dna asset-manifest.json 与 Cocos .meta 文件的桥梁。
  * 
  * 工作流程:
  *   1. 美术/AI 生成切图 → 放入 assets/ 指定目录
@@ -17,7 +17,7 @@
  *   node resolve-asset-uuids.js --project <project-root> --check            # 仅检查，不写入
  *   node resolve-asset-uuids.js --project <project-root> --verbose          # 详细输出
  * 
- * 如果不提供 --project，默认从 CWD 向上查找包含 design-dna/ 的目录。
+ * 如果不提供 --project，默认从 CWD 向上查找包含 cocos-dna/ 的目录。
  */
 
 const fs = require('fs');
@@ -28,7 +28,7 @@ const path = require('path');
 function findProjectRoot(startDir) {
     let dir = startDir || process.cwd();
     while (dir !== path.dirname(dir)) {
-        if (fs.existsSync(path.join(dir, 'design-dna'))) return dir;
+        if (fs.existsSync(path.join(dir, 'cocos-dna'))) return dir;
         dir = path.dirname(dir);
     }
     return null;
@@ -99,7 +99,7 @@ function extractUuidsFromMeta(metaPath) {
  * 解析单个页面的 asset-manifest.json
  */
 function resolvePageManifest(projectRoot, pageName, options = {}) {
-    const designDnaDir = path.join(projectRoot, 'design-dna', 'components');
+    const designDnaDir = path.join(projectRoot, 'cocos-dna', 'components');
     const manifestPath = path.join(designDnaDir, pageName, 'asset-manifest.json');
 
     if (!fs.existsSync(manifestPath)) {
@@ -213,7 +213,7 @@ function main() {
     const pageIdx = args.indexOf('--page');
     const pageFilter = pageIdx >= 0 && args[pageIdx + 1] ? args[pageIdx + 1] : null;
 
-    const designDnaDir = path.join(projectRoot, 'design-dna', 'components');
+    const designDnaDir = path.join(projectRoot, 'cocos-dna', 'components');
 
     console.log('═══════════════════════════════════════════════');
     console.log('  🔧 Cocos 资产 UUID 解析工具 (通用版)');
@@ -226,7 +226,7 @@ function main() {
         pages = [pageFilter];
     } else {
         if (!fs.existsSync(designDnaDir)) {
-            console.log('\n⚠ 未找到 design-dna/components/ 目录');
+            console.log('\n⚠ 未找到 cocos-dna/components/ 目录');
             process.exit(0);
         }
         pages = fs.readdirSync(designDnaDir, { withFileTypes: true })
