@@ -61,11 +61,18 @@
 - 内容层：文字样式/颜色/对齐
 - 按钮：完整交互状态（默认 / 悬停 / 按下 / 禁用）
 
-### 第6章：资源切图表
+### 第6章：资源切图清单
 
-列出实现所需的所有图片资源，详细格式见 → [node-spec.md](node-spec.md)
+列出实现所需的所有图片资源。
+
+**关键规则**：
+- design.md 第6章的资源清单表**只列文件名、尺寸、格式、九宫格、说明**
+- **资源路径（assetPath）、加载方式（loadType）、UUID 等信息以 `asset-manifest.json` 为唯一权威来源**，design.md 中**不得重复写路径或 loadType**，避免两处不同步
+- @property 映射表列出 Renderer 需要运行时访问的节点→属性声明
 
 命名规则：`bg_*` 背景 / `icon_*` 图标 / `btn_*` 按钮 / `char_*` 角色 / `frame_*` 边框 / `fx_*` 特效
+
+详细节点格式见 → [node-spec.md](node-spec.md)
 
 ### 第6.5章：资产绑定协议 (Asset Binding Protocol)
 

@@ -123,7 +123,7 @@ Phase 1: 结构          Phase 2: 分析          Phase 3: 生成（Cocos 转换
 | 第3章 视觉规范 | 色彩/字体/尺寸/动效 4 个子表 | — |
 | 第4章 节点树 | Cocos Prefab 结构（核心） | → [node-spec.md](references/node-spec.md) |
 | 第5章 元素详述 | 每个元素的设计参数（Cocos API 格式） | — |
-| 第6章 资源切图表 | 所有图片资源清单 | → [node-spec.md](references/node-spec.md) |
+| 第6章 资源切图清单 | 资源文件名/尺寸表 + @property 映射表（**路径以 asset-manifest.json 为权威，不重复**） | → [node-spec.md](references/node-spec.md) |
 | 第6.5章 资产绑定 | asset-manifest.json | → [asset-binding.md](references/asset-binding.md) |
 | 第7章 交互逻辑 | 点击、入场动画、页面跳转 | — |
 | 第8章 动态效果 | 粒子/动画/背景动效规范 | → [output-spec.md](references/output-spec.md) |

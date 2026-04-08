@@ -227,9 +227,20 @@ primaryButtonStates: {
 
 ---
 
-## 第6章：资源清单与 @property 映射表
+## 第6章：资源切图清单
 
-### 6.1 @property 映射表
+### 6.1 资源清单
+
+> 列出本页面使用的所有图片资源（文件名、尺寸、格式）。
+> **路径、loadType、assetPath 等信息以 `asset-manifest.json` 为唯一权威来源，此处不重复。**
+
+| # | 资源名称 | 文件名 | 尺寸 | 格式 | 九宫格 | 说明 |
+|---|---------|--------|------|------|--------|------|
+| 1 | 背景图 | `<bg_name>.png` | <W>x<H> | PNG | 否 | <说明> |
+| 2 | 装饰齿轮 | `<gear_name>.png` | <W>x<H> | PNG | 否 | 复用 main-menu |
+| 3 | 主按钮背景 | `<btn_name>.png` | <W>x<H> | PNG | 是 `{T:N,B:N,L:N,R:N}` | <说明> |
+
+### 6.2 @property 映射表
 
 > **组件脚本**：`<PageName>PageComp.ts`，挂载到 Prefab 根节点 `<PageName>Page`。
 > 下表列出所有需要运行时访问的节点 → @property 声明。
@@ -242,23 +253,6 @@ primaryButtonStates: {
 | `secondaryBtn` | `Node` | `ButtonGroup/SecondaryBtn` | 次要按钮交互绑定 |
 | `bgSprite` | `Sprite` | `BG` | 背景图片/颜色控制 |
 | `versionLabel` | `Label` | `VersionLabel` | 版本号动态更新 |
-
-### 6.2 静态 vs 动态资源决策
-
-| 资源 | 加载方式 | 理由 |
-|------|---------|------|
-| 背景图 `<bg>.png` | 静态（Prefab 内嵌） | 常驻显示，不需要运行时切换 |
-| 装饰齿轮 `<gear>.png` | 静态（Prefab 内嵌） | 固定装饰元素 |
-| 按钮图标（如有） | 动态（`resources/` 加载） | 可能按状态/配置切换 |
-
-### 6.3 资源文件清单
-
-> 对应 `asset-manifest.json`，列出本页面使用的所有资源。
-
-| 资源名 | 路径 | 类型 | 加载方式 |
-|--------|------|------|---------|
-| `<bg_name>` | `assets/resources/textures/<page>/` | SpriteFrame | static |
-| `<icon_name>` | `assets/resources/textures/<page>/` | SpriteFrame | dynamic |
 
 ---
 
