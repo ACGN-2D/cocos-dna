@@ -179,15 +179,25 @@ function validateCode(projectRoot, uiName) {
         errors.push(`Renderer 不存在: ${names.renderer}.ts`);
     } else {
         const content = fs.readFileSync(rendererFile, 'utf-8');
+
+        // === 必需模式：基于 BaseRenderer 生命周期 ===
         const requiredPatterns = [
-            { pattern: '_tryLoadPrefab', label: '_tryLoadPrefab 方法' },
-            { pattern: '_setupPrefabUI', label: '_setupPrefabUI 方法' },
-            { pattern: '_prefabReady', label: '_prefabReady 状态标记' },
-            { pattern: 'resources.load', label: 'resources.load 异步加载' },
+            { pattern: 'BaseRenderer', label: '继承 BaseRenderer 基类' },
+            { pattern: 'onInit', label: 'onInit() 生命周期钩子' },
+            { pattern: 'onShow', label: 'onShow() 生命周期钩子' },
         ];
+        // 资源加载：loadPrefab() 或 ResourceManager.load() 至少存在其一
+        const hasLoadPrefab = content.includes('loadPrefab');
+        const hasResourceManager = content.includes('ResourceManager.load');
+        if (!hasLoadPrefab && !hasResourceManager) {
+            errors.push('Renderer 缺少: loadPrefab() 或 ResourceManager.load() 资源加载');
+        }
+
+        // === 推荐模式 ===
         const recommendedPatterns = [
-            { pattern: 'I18n.t', label: 'I18n.t() 国际化' },
-            { pattern: 'SteamColors', label: 'SteamColors 常量' },
+            { pattern: 'onDispose', label: 'onDispose() 资源释放钩子' },
+            { pattern: 'I18n.t', label: 'I18n.t() 国际化（如项目启用）' },
+            { pattern: 'BaseRenderer.config', label: 'BaseRenderer.config 配色引用（或兼容导出）' },
         ];
 
         requiredPatterns.forEach(p => {
@@ -195,6 +205,16 @@ function validateCode(projectRoot, uiName) {
         });
         recommendedPatterns.forEach(p => {
             if (!content.includes(p.pattern)) console.log(`  ⚠️  Renderer 建议添加: ${p.label}`);
+        });
+
+        // === 旧模式警告：项目迁移参考（不阻断验证） ===
+        const deprecatedPatterns = [
+            { pattern: '_tryLoadPrefab', label: '_tryLoadPrefab（已迁移到 loadPrefab）' },
+            { pattern: '_setupPrefabUI', label: '_setupPrefabUI（已迁移到 onInit 钩子内逻辑）' },
+            { pattern: '_prefabReady', label: '_prefabReady（已由 RendererState 状态机替代）' },
+        ];
+        deprecatedPatterns.forEach(p => {
+            if (content.includes(p.pattern)) console.log(`  ⚠️  Renderer 存在旧模式: ${p.label}`);
         });
     }
 

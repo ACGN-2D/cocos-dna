@@ -1,11 +1,7 @@
 /**
  * LayerManager — 统一 UI 层级管理器
  * 
- * 来源：cocos-dna skill templates/runtime/ (v1.0.0)
- * 由 sync-runtime.js 自动同步到项目 assets/scripts/core/
- * 
- * ⚠️ 本文件由 skill 统一维护，项目中请勿直接修改。
- * 如需定制，请在 skill 模板中修改后重新同步。
+ * [cocos-dna skill template — v1.0.0]
  * 
  * 核心职责：
  *  通过 Node 的子节点顺序（Cocos 天然 child order = 渲染顺序）实现层级隔离。

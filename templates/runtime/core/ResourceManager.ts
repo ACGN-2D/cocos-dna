@@ -1,11 +1,7 @@
 /**
  * ResourceManager — 统一资源加载与释放管理器
  * 
- * 来源：cocos-dna skill templates/runtime/ (v1.0.0)
- * 由 sync-runtime.js 自动同步到项目 assets/scripts/core/
- * 
- * ⚠️ 本文件由 skill 统一维护，项目中请勿直接修改。
- * 如需定制，请在 skill 模板中修改后重新同步。
+ * [cocos-dna skill template — v1.0.0]
  * 
  * 核心职责：
  *  1. cache  — 避免重复加载同一资源
@@ -21,9 +17,9 @@
  *  // 释放整组（在 Renderer.onDispose 中调用）
  *  ResourceManager.releaseGroup('battle');
  * 
- * 与 BaseRenderer 集成：
- *  - loadPrefab() / loadImageToSprite() 内部改为调用 ResourceManager.load()
- *  - onDispose() 中调用 ResourceManager.releaseGroup(this._name)
+ * 与 BaseRenderer / BaseView 集成：
+ *  - loadPrefab() / loadImageToSprite() 内部调用 ResourceManager.load()
+ *  - onDispose() / dispose() 中调用 ResourceManager.releaseGroup(groupName)
  * 
  * 当前阶段刻意不做的事（避免过度设计）：
  *  - 引用计数（ref-count）— 当前项目资源归属清晰，group release 足够

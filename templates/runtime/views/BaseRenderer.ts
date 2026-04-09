@@ -1,7 +1,7 @@
 /**
  * BaseRenderer - 所有渲染器的统一基类（模板方法模式）
  * 
- * [cocos-dna skill template — 通用版本]
+ * [cocos-dna skill template — v1.0.0]
  * 
  * UI 构建模式：仅 Prefab 模式
  *  loadPrefab → cc.instantiate → 引用子节点
@@ -27,7 +27,7 @@
 import { Node, Sprite, SpriteFrame, UITransform,
     Color, Size, Vec2, Texture2D, ImageAsset, Rect,
     Prefab, instantiate, resources, Widget, Layout, Tween } from 'cc';
-import { ResourceManager } from './ResourceManager';
+import { ResourceManager } from '../core/ResourceManager';
 
 // ==================== 渲染器状态枚举 ====================
 
@@ -462,6 +462,11 @@ export abstract class BaseRenderer {
         sf.rect = new Rect(0, 0, 1, 1);
         sf.originalSize = new Size(1, 1);
         sf.offset = new Vec2(0, 0);
+        // ★ 禁止 DynamicAtlasManager 打包此 SpriteFrame
+        // 手动创建的 raw Uint8Array 纹理没有 nativeImage（HTMLImageElement/Canvas），
+        // DynamicAtlas.packToDynamicAtlas → texSubImage2D 会因数据格式不匹配而报
+        // "Overload resolution failed" 错误，导致所有 Sprite 渲染失败（黑屏）。
+        sf.packable = false;
         BaseRenderer._solidWhiteSF = sf;
         return sf;
     }

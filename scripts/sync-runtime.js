@@ -2,14 +2,18 @@
  * sync-runtime.js — cocos-dna Runtime 模板同步工具
  * 
  * 将 skill 的 templates/runtime/ 下的 TypeScript 模板文件
- * 同步到项目的 assets/scripts/runtime/ 目录中。
+ * 镜像同步到项目的 assets/scripts/runtime/ 目录中。
  * 
- * 目标目录结构（与项目 scripts/ 子目录名对应）：
- *   runtime/views/  → BaseRenderer.ts      （对应 scripts/views/ 下子类的基类）
- *   runtime/core/   → ResourceManager.ts   （资源加载/缓存/分组释放）
- *                     LayerManager.ts       （UI 层级隔离）
- *                     EventBus.ts           （全局事件总线）
- *                     DebugLogger.ts        （结构化调试日志）
+ * Skill 侧与项目侧目录结构完全一致（镜像复制）：
+ *   templates/runtime/core/   → assets/scripts/runtime/core/
+ *     ResourceManager.ts   （资源加载/缓存/分组释放）
+ *     LayerManager.ts       （UI 层级隔离）
+ *     EventBus.ts           （全局事件总线）
+ *     DebugLogger.ts        （结构化调试日志）
+ *     UIBinder.ts           （运行时节点绑定工具）
+ *   templates/runtime/views/  → assets/scripts/runtime/views/
+ *     BaseRenderer.ts       （渲染器基类）
+ *     BaseView.ts           （视图 Component 基类）
  * 
  * 同步策略：
  *  - 新文件：直接复制
@@ -33,16 +37,19 @@ const path = require('path');
 /**
  * skill 模板文件清单（只同步这些文件，不会意外覆盖项目自有代码）
  * 
- * targetSubdir: 相对于 assets/scripts/ 的目标子目录
- *   - 'runtime/core'   → assets/scripts/runtime/core/
- *   - 'runtime/views'  → assets/scripts/runtime/views/
+ * srcSubdir:    相对于 templates/runtime/ 的源子目录（skill 侧）
+ * targetSubdir: 相对于 assets/scripts/ 的目标子目录（项目侧）
+ * 
+ * 两侧结构完全一致（镜像复制），import 路径无需转换。
  */
 const TEMPLATE_FILES = [
-    { name: 'ResourceManager.ts', targetSubdir: 'runtime/core' },
-    { name: 'LayerManager.ts',    targetSubdir: 'runtime/core' },
-    { name: 'EventBus.ts',        targetSubdir: 'runtime/core' },
-    { name: 'DebugLogger.ts',     targetSubdir: 'runtime/core' },
-    { name: 'BaseRenderer.ts',    targetSubdir: 'runtime/views' },
+    { name: 'ResourceManager.ts', srcSubdir: 'core',  targetSubdir: 'runtime/core' },
+    { name: 'LayerManager.ts',    srcSubdir: 'core',  targetSubdir: 'runtime/core' },
+    { name: 'EventBus.ts',        srcSubdir: 'core',  targetSubdir: 'runtime/core' },
+    { name: 'DebugLogger.ts',     srcSubdir: 'core',  targetSubdir: 'runtime/core' },
+    { name: 'UIBinder.ts',        srcSubdir: 'core',  targetSubdir: 'runtime/core' },
+    { name: 'BaseRenderer.ts',    srcSubdir: 'views', targetSubdir: 'runtime/views' },
+    { name: 'BaseView.ts',        srcSubdir: 'views', targetSubdir: 'runtime/views' },
 ];
 
 /** 版本标识（从模板文件头部注释中提取） */
@@ -108,7 +115,7 @@ function syncRuntime(projectRoot, skillRoot, options = {}) {
     for (const entry of TEMPLATE_FILES) {
         const filename = entry.name;
         const targetDir = path.join(scriptsDir, entry.targetSubdir);
-        const srcPath = path.join(templateDir, filename);
+        const srcPath = path.join(templateDir, entry.srcSubdir, filename);
         const dstPath = path.join(targetDir, filename);
 
         // 确保目标目录存在

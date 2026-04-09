@@ -1,6 +1,6 @@
 /**
  * DebugLogger — 结构化调试日志系统
- * cocos-dna skill templates/runtime/ (v1.0.0)
+ * [cocos-dna skill template — v1.0.0]
  *
  * 功能：
  *  - 带时间戳、模块标签、级别的结构化日志
@@ -8,9 +8,6 @@
  *  - E2E 测试通过 window.__DEBUG_LOG__ 读取结构化数据做断言
  *  - 支持运行时开/关，生产环境可完全关闭（零性能开销）
  *  - 支持按模块过滤
- *
- * ⚠️ 本文件由 cocos-dna skill 统一维护，请勿手动修改。
- *    修改会在下次 sync-runtime 时被覆盖。
  *
  * 用法：
  *   import { DebugLogger } from '../runtime/core/DebugLogger';

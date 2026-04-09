@@ -1,15 +1,12 @@
 /**
  * EventBus — 全局事件总线
- * cocos-dna skill templates/runtime/ (v1.0.0)
+ * [cocos-dna skill template — v1.0.0]
  *
  * 解耦模块间通信的通用事件系统。
  * 支持 on / off / emit / once，单例模式，支持 context 绑定。
  *
  * 项目特定的事件常量（如 GameEvents）不在此文件中定义，
  * 应由项目在自有代码中维护（如 events/GameEvents.ts）。
- *
- * ⚠️ 本文件由 cocos-dna skill 统一维护，请勿手动修改。
- *    修改会在下次 sync-runtime 时被覆盖。
  *
  * 用法：
  *   import { EventBus } from '../runtime/core/EventBus';

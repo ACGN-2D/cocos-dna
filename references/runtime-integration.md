@@ -12,15 +12,17 @@ skill 层（通用，skill 维护）          项目层（特有，项目维护�
 │ templates/runtime/     │  sync →  │ assets/scripts/runtime/  │  ← ⚠️ 禁止手动修改
 │   ResourceManager.ts   │  ─────→  │   core/ResourceManager.ts│
 │   LayerManager.ts      │  ─────→  │   core/LayerManager.ts   │
+│   EventBus.ts          │  ─────→  │   core/EventBus.ts       │
+│   DebugLogger.ts       │  ─────→  │   core/DebugLogger.ts    │
 │   BaseRenderer.ts      │  ─────→  │   views/BaseRenderer.ts  │
 └────────────────────────┘          └──────────────────────────┘
                                     ┌──────────────────────────┐
-                                    │ assets/scripts/core/     │  ← 项目自有
-                                    │   EventBus.ts            │
+                                    │ assets/scripts/core/     │  ← 项目自有 + 桥接文件
+                                    │   EventBus.ts            │  ← 桥接：重导出 runtime + 项目 GameEvents
+                                    │   DebugLogger.ts         │  ← 桥接：纯重导出 runtime
                                     │   GameFlowFSM.ts         │
                                     │   I18n.ts                │
                                     │   DataProvider.ts        │
-                                    │   DebugLogger.ts         │
                                     │   RendererConfig.ts      │
                                     └──────────────────────────┘
 ```
@@ -32,7 +34,8 @@ skill 层（通用，skill 维护）          项目层（特有，项目维护�
 | ResourceManager | ✅ | ❌ | 纯通用：cache + group release，与项目无关 |
 | LayerManager | ✅ | ❌ | 纯通用：层级定义与业务无关 |
 | BaseRenderer | ✅ | ❌ | 通用基类：配色和分辨率通过 configure() 外部注入，不含项目硬编码 |
-| EventBus | ❌ | ✅ | 项目特有：事件命名、接口设计各不相同 |
+| EventBus | ✅ | 桥接 | 通用事件总线（on/off/emit/once + 单例）。项目侧通过桥接文件重导出并追加 GameEvents 常量 |
+| DebugLogger | ✅ | 桥接 | 通用结构化日志（module/tag/level）。项目侧通过桥接文件纯重导出 |
 | GameFlowFSM | ❌ | ✅ | 项目特有：状态列表与游戏流深度绑定 |
 
 ### 判断标准
@@ -48,7 +51,7 @@ skill 层（通用，skill 维护）          项目层（特有，项目维护�
 ### 首次集成
 
 Agent 在以下时机自动触发同步：
-1. **Phase 3 首次执行时** — 发现项目缺少 `scripts/runtime/core/ResourceManager.ts` / `scripts/runtime/core/LayerManager.ts` / `scripts/runtime/views/BaseRenderer.ts`
+1. **Phase 3 首次执行时** — 发现项目缺少 `scripts/runtime/core/ResourceManager.ts` / `scripts/runtime/core/LayerManager.ts` / `scripts/runtime/core/EventBus.ts` / `scripts/runtime/core/DebugLogger.ts` / `scripts/runtime/views/BaseRenderer.ts`
 2. **用户显式请求** — "同步 runtime 模板"、"更新 runtime"
 
 ```bash
@@ -208,7 +211,11 @@ Agent 在执行 runtime 集成时自检：
 
 - [ ] ResourceManager.ts 已同步到 `assets/scripts/runtime/core/`
 - [ ] LayerManager.ts 已同步到 `assets/scripts/runtime/core/`
+- [ ] EventBus.ts 已同步到 `assets/scripts/runtime/core/`
+- [ ] DebugLogger.ts 已同步到 `assets/scripts/runtime/core/`
 - [ ] BaseRenderer.ts 已同步到 `assets/scripts/runtime/views/`
+- [ ] 项目侧桥接文件存在：`assets/scripts/core/EventBus.ts`（重导出 + GameEvents）
+- [ ] 项目侧桥接文件存在：`assets/scripts/core/DebugLogger.ts`（纯重导出）
 - [ ] BaseRenderer 的 `loadPrefab()` 已改走 ResourceManager
 - [ ] BaseRenderer 的 `loadImageToSprite()` 已改走 ResourceManager
 - [ ] BaseRenderer 的 `dispose()` 已自动调用 `ResourceManager.releaseGroup()`

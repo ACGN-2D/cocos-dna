@@ -36,10 +36,12 @@ cocos-dna/
 │   └── runtime-integration.md            ← ★ Runtime 集成规范（同步 + 改造指南）
 ├── templates/                            ← ★ 通用代码模板（同步到项目）
 │   └── runtime/                          ← Runtime 基础设施
-│       ├── ResourceManager.ts            ← 资源加载/缓存/分组释放
-│       ├── LayerManager.ts               ← UI 层级管理（page/popup/effect/guide）
-│       ├── EventBus.ts                   ← ★ 全局事件总线（发布/订阅）
-│       ├── DebugLogger.ts                ← ★ 调试日志工具（分级输出）
+│       ├── core/                         ← 核心模块
+│       │   ├── ResourceManager.ts        ← 资源加载/缓存/分组释放
+│       │   ├── LayerManager.ts           ← UI 层级管理（page/popup/effect/guide）
+│       │   ├── EventBus.ts               ← 全局事件总线（发布/订阅）
+│       │   └── DebugLogger.ts            ← 调试日志工具（分级输出）
+│       ├── views/                        ← 视图模块
 │       └── README.md                     ← 版本说明 + 变更日志
 ├── scripts/                              ← 可执行工具脚本
 │   ├── mcp-client.js                     ← 通用 MCP 通信层

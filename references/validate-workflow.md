@@ -67,12 +67,22 @@
 - 继承 `Component`
 
 ### Renderer 检查（`assets/scripts/views/<Page>Renderer.ts`）
+
+**必需模式**（缺少即报 ❌）：
 - 继承 `BaseRenderer`
 - 包含 `onInit()` 方法（Prefab 加载 + UI 初始化）
 - 包含 `onShow()` 方法（进场动画 + 数据绑定）
-- 使用 `loadPrefab()` / `ResourceManager.load()` 异步加载资源
-- 使用项目配色常量（通过 `BaseRenderer.config.colors` 或兼容导出访问）
+- 使用 `loadPrefab()` 或 `ResourceManager.load()` 异步加载资源（至少一种）
+
+**推荐模式**（缺少报 ⚠️ 建议）：
+- 包含 `onDispose()` 资源释放钩子
 - 使用 `I18n.t()` 获取文本（如项目启用了 i18n）
+- 使用 `BaseRenderer.config` 引用项目配色（或项目兼容导出）
+
+**旧模式警告**（存在报 ⚠️ 迁移提示，不阻断验证）：
+- `_tryLoadPrefab` → 已迁移到 `loadPrefab()`
+- `_setupPrefabUI` → 已迁移到 `onInit()` 钩子内逻辑
+- `_prefabReady` → 已由 `RendererState` 状态机替代
 
 ---
 

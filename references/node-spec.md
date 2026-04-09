@@ -122,4 +122,13 @@ PageRoot (root) [UITransform: 宽x高] [Widget: LRTB=0]
 
 ### 资源路径
 
-`assets/resources/textures/<page-name>/`
+资源路径遵循三层归属模型（详见 → [asset-binding.md](asset-binding.md)）：
+
+| 场景 | 路径 | 说明 |
+|------|------|------|
+| 静态引用（拖入 Prefab） | `assets/textures/<ownership>/<page-name>/` | 不进 resources |
+| 动态加载（运行时路径加载） | `assets/resources/textures/<ownership>/<page-name>/` | 进 resources |
+
+其中 `<ownership>` 为归属分类：`common`（全局复用）/ `pages`（页面专属）/ `modules`（跨页面业务模块）。
+
+> **原则**：能拖进 Prefab 的不进 resources，必须靠路径加载的才进 resources。
