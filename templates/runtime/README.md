@@ -1,20 +1,20 @@
 # cocos-dna Runtime Templates
 
-> **版本**: v1.4.0  
+> **版本**: v1.6.0  
 > **最后更新**: 2026-04-09
 
 ## 概述
 
 本目录包含 cocos-dna skill 提供的**通用运行时基础设施模板**。这些模板由 skill 统一维护，通过 `sync-runtime.js` 脚本同步到项目中。
 
-**Skill v1.2 覆盖层**（7 文件）：
-- **生命周期** — BaseRenderer（纯 TS 类，状态机 + 双层生命周期 + Prefab 加载）
+**Skill v1.6 覆盖层**（6 模板 + 1 codegen 脚本）：
 - **视图基类** — BaseView（Component 基类，三层架构：runtime → generated → business）
 - **绑定工具** — UIBinder（运行时动态节点绑定，auto/map/component 三种模式）
 - **资源** — ResourceManager（cache + group release + 并发加载防护）
 - **层级** — LayerManager（page / popup / effect / guide）
 - **通信** — EventBus（on/off/emit/once + 单例 + context 绑定）
 - **调试** — DebugLogger（module/tag/level + window.__DEBUG_LOG__ 供 E2E）
+- **Codegen** — `generate-view.js`（读取 asset-manifest.json → 生成 Layer 2 XxxView.generated.ts）
 
 **目录结构**（skill 侧与项目侧完全镜像）：
 ```
@@ -26,16 +26,34 @@ templates/runtime/          →  assets/scripts/runtime/
 │   ├── DebugLogger.ts          │   ├── DebugLogger.ts
 │   └── UIBinder.ts             │   └── UIBinder.ts
 ├── views/                      ├── views/
-│   ├── BaseRenderer.ts         │   ├── BaseRenderer.ts
 │   └── BaseView.ts             │   └── BaseView.ts
 └── README.md                   └── README.md (不同步)
+
+scripts/
+├── generate-view.js            # Codegen: asset-manifest.json → XxxView.generated.ts
+└── sync-runtime.js             # 模板同步到项目
 ```
 
 import 路径两侧完全一致，sync 为纯镜像复制，无需路径转换。
 
+**项目侧三层架构文件分布**：
+```
+assets/scripts/views/           # Layer 2 + Layer 3
+├── BattleView.generated.ts     # Layer 2 (AI-generated, safe to overwrite)
+├── BattlePageView.ts           # Layer 3 (business logic, never overwritten)
+├── CharSelectView.generated.ts
+├── CharSelectPageView.ts
+├── MainMenuView.generated.ts
+├── MainMenuPageView.ts
+├── RouteMapView.generated.ts
+├── RouteMapPageView.ts
+├── DialogueView.generated.ts
+└── DialoguePageView.ts
+```
+
 **为什么放在 skill 而非项目里？**
 
-- 这 7 个模块是所有 Cocos DNA 项目都需要的通用能力
+- 这 6 个模块是所有 Cocos DNA 项目都需要的通用能力
 - 由 skill 统一维护，确保跨项目的一致性和可升级性
 - 项目中只持有同步后的副本，不直接修改
 
@@ -43,11 +61,10 @@ import 路径两侧完全一致，sync 为纯镜像复制，无需路径转换�
 
 | 文件 | 目录 | 版本 | 职责 |
 |------|------|------|------|
-| `BaseRenderer.ts` | `views/` | 1.0.0 | 渲染器基类（纯 TS 类，状态机 + 生命周期 + Prefab 加载），配色/分辨率通过 `configure()` 注入 |
 | `BaseView.ts` | `views/` | 1.1.0 | **视图 Component 基类**（三层架构：runtime → generated → business），支持 @property + 状态机 + 资源管理 + **asset-manifest 动态绑定** |
 | `ResourceManager.ts` | `core/` | 1.0.0 | 统一资源加载/缓存/分组释放 |
 | `LayerManager.ts` | `core/` | 1.0.0 | UI 层级隔离（page/popup/effect/guide） |
-| `EventBus.ts` | `core/` | 1.0.0 | 全局事件总线（on/off/emit/once + 单例 + context 绑定） |
+| `EventBus.ts` | `core/` | 1.1.0 | 全局事件总线（on/off/emit/once + 单例 + context 绑定）+ 使用范围规约 + 生命周期清理规则 |
 | `DebugLogger.ts` | `core/` | 1.0.0 | 结构化调试日志（module/tag/level + window.__DEBUG_LOG__ 供 E2E） |
 | `UIBinder.ts` | `core/` | 1.0.0 | **运行时节点绑定工具**（auto/map/component 三种模式），作为 @property 的动态 fallback |
 
@@ -57,7 +74,6 @@ Skill 模板只放 **runtime core**（80%项目都会用到的通用基础设施
 
 | 类别 | 模板 |
 |------|------|
-| 生命周期（纯类） | BaseRenderer |
 | 生命周期（Component） | BaseView |
 | 绑定工具 | UIBinder |
 | 资源 | ResourceManager |
@@ -91,53 +107,36 @@ node .codebuddy/skills/cocos-dna/scripts/sync-runtime.js --project <project-root
 
 | 模块 | 归属 | 说明 |
 |------|------|------|
-| `BaseRenderer.ts` | **skill 模板** | 通用渲染器基类（纯 TS 类，状态机 + 生命周期），配色/分辨率通过 `configure()` 注入 |
-| `BaseView.ts` | **skill 模板** | 视图 Component 基类（三层架构），新页面推荐使用 |
+| `BaseView.ts` | **skill 模板** | 视图 Component 基类（三层架构） |
 | `UIBinder.ts` | **skill 模板** | 运行时节点绑定工具，@property 的动态 fallback |
 | `ResourceManager.ts` | **skill 模板** | 纯通用能力，任何 Cocos DNA 项目都能用 |
 | `LayerManager.ts` | **skill 模板** | 纯通用能力，层级定义与业务无关 |
 | `EventBus.ts` | **skill 模板** | 纯通用事件总线，项目特定事件常量（GameEvents）另外维护 |
 | `DebugLogger.ts` | **skill 模板** | 零依赖调试日志，window.__DEBUG_LOG__ 支持 E2E 自动化 |
-| `RendererConfig.ts` | **项目自有** | 项目特定的配色方案和设计分辨率（调用 `BaseRenderer.configure()`） |
-| `XxxView.generated.ts` | **AI 生成** | 由生成器自动生成的 @property 声明层（可安全覆盖） |
-| `XxxView.ts` | **项目自有** | 业务逻辑层（extends Generated，永不覆盖） |
+| `RendererConfig.ts` | **项目自有** | 项目特定的配色方案和设计分辨率 |
+| `XxxView.generated.ts` | **Codegen 生成** | 由 `generate-view.js` 脚本自动生成的 @property + assetManifest 声明层（可安全覆盖） |
+| `XxxPageView.ts` | **项目自有** | 业务逻辑层（extends Generated，永不覆盖） |
 | `GameEvents.ts` | **项目自有** | 项目特定事件常量枚举 |
 | `GameFlowFSM.ts` | **项目自有** | 状态机与具体游戏流绑定 |
 
-## BaseRenderer 配置注入模式
+## BaseView 三层架构
 
-BaseRenderer 模板通过 `IRendererConfig` 接口注入项目特定的配置：
-
-```ts
-// 项目侧: core/RendererConfig.ts
-import { IRendererConfig } from '../runtime/views/BaseRenderer';
-export const RENDERER_CONFIG: IRendererConfig = {
-    designWidth: 1280,
-    designHeight: 720,
-    colors: {
-        PRIMARY:    new Color(...),
-        BG_DEEP:    new Color(...),
-        TEXT_LIGHT: new Color(...),
-        // ...
-    }
-};
-
-// GameEntry.onLoad() 中注入
-BaseRenderer.configure(RENDERER_CONFIG);
-```
-
-项目侧的 `views/BaseRenderer.ts` 从模板同步后，还需添加兼容导出（`SteamColors`/`DESIGN_WIDTH`/`DESIGN_HEIGHT`），
-使已有子类的 `import { SteamColors } from './BaseRenderer'` 无需修改。
-
-## BaseView 三层架构（v1.2 新增）
-
-BaseView 是新页面的推荐基类，采用三层代码隔离架构：
+BaseView 是所有页面的基类，采用三层代码隔离架构：
 
 ```
 Layer 1: BaseView.ts          ← runtime（skill 维护，sync 覆盖）
-Layer 2: XxxView.generated.ts ← AI 生成（@property 声明，可安全覆盖）
-Layer 3: XxxView.ts           ← 业务逻辑（人写，永不覆盖）
+Layer 2: XxxView.generated.ts ← Codegen 生成（generate-view.js，可安全覆盖）
+Layer 3: XxxPageView.ts       ← 业务逻辑（人写，永不覆盖）
 ```
+
+**当前已迁移页面**（v1.5）：
+| 页面 | Layer 2 | Layer 3 | 状态 |
+|------|---------|---------|------|
+| Battle | BattleView.generated.ts | BattlePageView.ts | ✅ 已迁移 |
+| MainMenu | MainMenuView.generated.ts | MainMenuPageView.ts | ✅ 已迁移 |
+| CharSelect | CharSelectView.generated.ts | CharSelectPageView.ts | ✅ 已迁移 |
+| RouteMap | RouteMapView.generated.ts | RouteMapPageView.ts | ✅ 已迁移 |
+| Dialogue | DialogueView.generated.ts | DialoguePageView.ts | ✅ 已迁移 |
 
 ### 三层示例
 
@@ -161,13 +160,13 @@ export class HomeViewGenerated extends BaseView {
 }
 
 // Layer 3: Business logic (human-written, never overwritten)
-// file: HomeView.ts
+// file: HomePageView.ts
 import { _decorator, Node } from 'cc';
 import { HomeViewGenerated } from './HomeView.generated';
 const { ccclass } = _decorator;
 
-@ccclass('HomeView')
-export class HomeView extends HomeViewGenerated {
+@ccclass('HomePageView')
+export class HomePageView extends HomeViewGenerated {
     protected onBind(): void {
         this.btnStart.on(Node.EventType.TOUCH_END, this._onStart, this);
     }
@@ -245,16 +244,15 @@ if (attackBg) {
 - 自动应用 `sliceMode`（simple / sliced / tiled）到 Sprite 组件
 - 所有加载的资源归入 `resourceGroup`，dispose 时自动释放
 
-### BaseView vs BaseRenderer
+### BaseView vs BaseRenderer (已废弃)
 
-| 维度 | BaseRenderer | BaseView |
+| 维度 | BaseRenderer (已删除) | BaseView |
 |------|-------------|----------|
 | 继承 | 纯 TypeScript 类 | cc.Component |
 | @property | ❌ 不支持 | ✅ 支持 |
 | 生命周期驱动 | GameEntry 手动调用 | Cocos 引擎 + open()/close() |
 | 代码隔离 | 无（Renderer 整体人写） | 三层（runtime → generated → business） |
-| 适用场景 | 已有页面（向后兼容） | **新页面（推荐）** |
-| 状态 | 不废弃，继续维护 | v1.2 新增 |
+| 状态 | v1.6 已删除 | 唯一视图基类 |
 
 ### UIBinder 使用
 
@@ -273,7 +271,71 @@ UIBinder.bind(this.node, this, {
 });
 ```
 
+## generate-view.js Codegen 脚本（v1.5 新增）
+
+`generate-view.js` 读取 `cocos-dna/components/<page>/asset-manifest.json`，自动生成 Layer 2 的 `XxxView.generated.ts` 文件。
+
+**数据流**：
+```
+asset-manifest.json (设计时唯一数据源)
+        ↓ generate-view.js 读取 JSON
+XxxView.generated.ts (Layer 2)
+        ↓ override get assetManifest()
+BaseView.onLoad() → _bindManifestAssets()
+        ↓ 自动加载 + 绑定到 Sprite
+Prefab 节点上的 Sprite 组件
+```
+
+**用法**：
+```bash
+# 生成单个页面
+node .codebuddy/skills/cocos-dna/scripts/generate-view.js battle
+
+# 预览不写入文件
+node .codebuddy/skills/cocos-dna/scripts/generate-view.js battle --dry-run
+
+# 生成所有页面
+node .codebuddy/skills/cocos-dna/scripts/generate-view.js all --verbose
+
+# 自定义输出目录
+node .codebuddy/skills/cocos-dna/scripts/generate-view.js battle --out ./custom/path/
+```
+
+**生成内容**：
+- `viewName` / `resourceGroup` getter 实现
+- `assetManifest` getter（仅 `loadType: 'dynamic'` + `status: 'ready'` 的条目）
+- `@property` 声明（仅 `loadType: 'static'` 的条目）
+- 完整的文件头注释（来源、生成时间、再生成命令）
+
 ## 变更日志
+
+### v1.6.0 (2026-04-09)
+- **BaseRenderer 彻底删除**: 所有页面均使用 BaseView 三层架构
+  - Dialogue: DialogueRenderer → DialoguePageView (implements IDialogueRenderer)
+  - 删除 `BaseRenderer.ts`（skill 模板 + 项目侧）
+  - 删除 `DialogueRenderer.ts`
+  - 新增 `DialogueView.generated.ts` (Layer 2) + `DialoguePageView.ts` (Layer 3)
+  - `sync-runtime.js` 移除 BaseRenderer 同步条目
+  - `RendererConfig.ts` 移除 BaseRenderer 依赖，`IRendererConfig` 接口本地定义
+  - GameEntry 删除 `_renderers` / `_activeRenderer` / `_switchRenderer`
+  - GameEntry 统一使用 `_switchToView` 管理所有页面
+  - Skill 模板从 7 文件减少到 6 文件
+
+### v1.5.0 (2026-04-09)
+- **三层架构全面落地**: 4 个页面全部迁移到 BaseView 三层架构
+  - MainMenu: MainMenuRenderer → MainMenuPageView
+  - CharSelect: CharSelectRenderer → CharSelectPageView
+  - RouteMap: MapRenderer → RouteMapPageView (implements IMapRenderer)
+  - Battle: BattleRenderer → BattlePageView (已在 v1.4 完成)
+- **Layer 3 命名规范**: `XxxView.ts` → `XxxPageView.ts`（避免与 ui/ 下的 MVC View 混淆）
+- **Codegen 脚本**: 新增 `generate-view.js`，从 asset-manifest.json 自动生成 Layer 2
+  - 支持 `--dry-run` / `--verbose` / `--out` / `all` 选项
+  - 自动处理 dynamic/static 分类、boundToNodes 路径简化、nineSlice 等
+- **GameEntry 统一初始化**: `_initAllViews()` 替代分散的 Renderer 初始化
+  - 所有 BaseView 页面通过 `Promise.allSettled` 并行加载 Prefab
+  - 状态机 `_switchRenderer` → `_switchToView` (MainMenu/CharSelect/Map)
+- **删除旧 Renderer**: BattleRenderer / MainMenuRenderer / CharSelectRenderer / MapRenderer
+- **BaseRenderer 降级**: 仅 DialogueRenderer 继续使用，不再新增 BaseRenderer 子类
 
 ### v1.4.0 (2026-04-09)
 - **Asset Manifest 绑定**: BaseView 新增 `assetManifest` getter + `_bindManifestAssets()` 自动绑定

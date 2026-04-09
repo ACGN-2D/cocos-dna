@@ -12,7 +12,6 @@
  *     DebugLogger.ts        （结构化调试日志）
  *     UIBinder.ts           （运行时节点绑定工具）
  *   templates/runtime/views/  → assets/scripts/runtime/views/
- *     BaseRenderer.ts       （渲染器基类）
  *     BaseView.ts           （视图 Component 基类）
  * 
  * 同步策略：
@@ -48,7 +47,6 @@ const TEMPLATE_FILES = [
     { name: 'EventBus.ts',        srcSubdir: 'core',  targetSubdir: 'runtime/core' },
     { name: 'DebugLogger.ts',     srcSubdir: 'core',  targetSubdir: 'runtime/core' },
     { name: 'UIBinder.ts',        srcSubdir: 'core',  targetSubdir: 'runtime/core' },
-    { name: 'BaseRenderer.ts',    srcSubdir: 'views', targetSubdir: 'runtime/views' },
     { name: 'BaseView.ts',        srcSubdir: 'views', targetSubdir: 'runtime/views' },
 ];
 

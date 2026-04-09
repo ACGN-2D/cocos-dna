@@ -34,20 +34,16 @@
  * State machine:
  *   None → Ready → Visible ⇄ Hidden → Disposed
  *
- * Lifecycle (dual-layer, same pattern as BaseRenderer):
+ * Lifecycle (dual-layer):
  *   Driver layer (public):  open() / close() / refresh() / dispose()
  *   Hook layer (protected): onBind() / onShow() / onHide() / onRefresh() / onDispose()
  *
- * Key differences from BaseRenderer:
+ * Key features:
  *   - Extends cc.Component → supports @property serialization
  *   - Mounted on Prefab root node → Cocos engine drives lifecycle
  *   - No need for separate PageComp class → one class does both binding + logic
  *   - Resource group auto-release on dispose
- *
- * Coexistence with BaseRenderer:
- *   BaseRenderer is NOT deprecated. Existing Renderers continue to work.
- *   BaseView is the recommended approach for NEW pages.
- *   Migration from Renderer → View is optional and incremental.
+ *   - Three-layer code isolation: runtime → generated → business
  */
 
 import {

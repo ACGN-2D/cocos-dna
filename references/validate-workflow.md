@@ -10,7 +10,7 @@
 |------|----------|----------|
 | V1 | design.md | 9章完整 + 必填字段齐全 |
 | V2 | Prefab | 节点树与 design.md 第4章一致 |
-| V3 | Renderer/Comp | 必需方法和模式齐全 |
+| V3 | View | 三层架构的必需方法和模式齐全 |
 | V4 | 测试 | 测试文件存在且含必要断言 |
 
 ---
@@ -59,30 +59,40 @@
 
 ---
 
-## V3: Renderer / Comp 验证
+## V3: View 验证（三层架构）
 
-### Comp 检查（`assets/scripts/prefab-components/<Page>PageComp.ts`）
-- 包含 `@ccclass` 装饰器
-- 包含 `@property` 声明（至少 1 个子节点引用）
-- 继承 `Component`
-
-### Renderer 检查（`assets/scripts/views/<Page>Renderer.ts`）
+### Layer 2 检查（`assets/scripts/views/<Page>View.generated.ts`）
 
 **必需模式**（缺少即报 ❌）：
-- 继承 `BaseRenderer`
-- 包含 `onInit()` 方法（Prefab 加载 + UI 初始化）
-- 包含 `onShow()` 方法（进场动画 + 数据绑定）
-- 使用 `loadPrefab()` 或 `ResourceManager.load()` 异步加载资源（至少一种）
+- 包含 `@ccclass` 装饰器（类名含 `Generated` 后缀）
+- 继承 `BaseView`（从 `../runtime/views/BaseView` 导入）
+- override `viewName` getter（返回视图名称字符串）
+- override `resourceGroup` getter（返回资源分组名称）
+- 至少 1 个 `@property` 声明
 
 **推荐模式**（缺少报 ⚠️ 建议）：
-- 包含 `onDispose()` 资源释放钩子
-- 使用 `I18n.t()` 获取文本（如项目启用了 i18n）
-- 使用 `BaseRenderer.config` 引用项目配色（或项目兼容导出）
+- override `assetManifest` getter（如 design.md 第 6.5 章定义了动态资源）
 
-**旧模式警告**（存在报 ⚠️ 迁移提示，不阻断验证）：
-- `_tryLoadPrefab` → 已迁移到 `loadPrefab()`
-- `_setupPrefabUI` → 已迁移到 `onInit()` 钩子内逻辑
-- `_prefabReady` → 已由 `RendererState` 状态机替代
+### Layer 3 检查（`assets/scripts/views/<Page>PageView.ts`）
+
+**必需模式**（缺少即报 ❌）：
+- 包含 `@ccclass` 装饰器
+- 继承 Layer 2 类（`<Page>ViewGenerated`）
+- override `onBind()` 方法（事件绑定）
+
+**推荐模式**（缺少报 ⚠️ 建议）：
+- override `onRefresh(data?)` 方法（数据填充）
+- 使用 `I18n.t()` 获取文本（如项目启用了 i18n）
+
+**禁止模式**（存在报 ❌）：
+- Layer 3 中声明 `@property`（应在 Layer 2 中声明）
+- Layer 3 中 override `viewName` / `resourceGroup`（应在 Layer 2 中定义）
+
+### Import 规范检查
+
+**违反报 ⚠️**：
+- `SteamColors` 必须从 `ThemeConfig.ts` 导入
+- `DESIGN_WIDTH` / `DESIGN_HEIGHT` 必须从 `RendererConfig.ts` 导入
 
 ---
 

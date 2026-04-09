@@ -38,7 +38,8 @@ function getNames(uiName) {
     const pascal = toPascal(uiName);
     return {
         prefab: `${pascal}Page`,
-        renderer: `${pascal}Renderer`,
+        viewGenerated: `${pascal}View.generated`,
+        pageView: `${pascal}PageView`,
         comp: `${pascal}PageComp`,
     };
 }
@@ -160,7 +161,7 @@ function validatePrefab(projectRoot, uiName) {
     return { valid: errors.length === 0, errors };
 }
 
-// ==================== V3: Renderer / Comp 验证 ====================
+// ==================== V3: View 验证（三层架构） ====================
 
 function validateCode(projectRoot, uiName) {
     console.log(`\n💻 V3: 验证代码 - ${uiName}`);
@@ -168,69 +169,76 @@ function validateCode(projectRoot, uiName) {
     const names = getNames(uiName);
     const errors = [];
 
-    // 检查 Renderer (views/ 或 ui/ 目录)
-    const rendererPaths = [
-        path.join(projectRoot, 'assets', 'scripts', 'views', `${names.renderer}.ts`),
-        path.join(projectRoot, 'assets', 'scripts', 'ui', uiName, `${names.renderer}.ts`),
-    ];
-    const rendererFile = rendererPaths.find(p => fs.existsSync(p));
-
-    if (!rendererFile) {
-        errors.push(`Renderer 不存在: ${names.renderer}.ts`);
+    // 检查 Layer 2: View.generated.ts
+    const layer2Path = path.join(projectRoot, 'assets', 'scripts', 'views', `${names.viewGenerated}.ts`);
+    if (!fs.existsSync(layer2Path)) {
+        errors.push(`Layer 2 不存在: ${names.viewGenerated}.ts`);
     } else {
-        const content = fs.readFileSync(rendererFile, 'utf-8');
+        const content = fs.readFileSync(layer2Path, 'utf-8');
 
-        // === 必需模式：基于 BaseRenderer 生命周期 ===
         const requiredPatterns = [
-            { pattern: 'BaseRenderer', label: '继承 BaseRenderer 基类' },
-            { pattern: 'onInit', label: 'onInit() 生命周期钩子' },
-            { pattern: 'onShow', label: 'onShow() 生命周期钩子' },
-        ];
-        // 资源加载：loadPrefab() 或 ResourceManager.load() 至少存在其一
-        const hasLoadPrefab = content.includes('loadPrefab');
-        const hasResourceManager = content.includes('ResourceManager.load');
-        if (!hasLoadPrefab && !hasResourceManager) {
-            errors.push('Renderer 缺少: loadPrefab() 或 ResourceManager.load() 资源加载');
-        }
-
-        // === 推荐模式 ===
-        const recommendedPatterns = [
-            { pattern: 'onDispose', label: 'onDispose() 资源释放钩子' },
-            { pattern: 'I18n.t', label: 'I18n.t() 国际化（如项目启用）' },
-            { pattern: 'BaseRenderer.config', label: 'BaseRenderer.config 配色引用（或兼容导出）' },
+            { pattern: 'BaseView', label: '继承 BaseView 基类' },
+            { pattern: '@ccclass', label: '@ccclass 装饰器' },
+            { pattern: 'viewName', label: 'viewName getter' },
+            { pattern: 'resourceGroup', label: 'resourceGroup getter' },
+            { pattern: '@property', label: '至少 1 个 @property 声明' },
         ];
 
         requiredPatterns.forEach(p => {
-            if (!content.includes(p.pattern)) errors.push(`Renderer 缺少: ${p.label}`);
-        });
-        recommendedPatterns.forEach(p => {
-            if (!content.includes(p.pattern)) console.log(`  ⚠️  Renderer 建议添加: ${p.label}`);
+            if (!content.includes(p.pattern)) errors.push(`Layer 2 缺少: ${p.label}`);
         });
 
-        // === 旧模式警告：项目迁移参考（不阻断验证） ===
-        const deprecatedPatterns = [
-            { pattern: '_tryLoadPrefab', label: '_tryLoadPrefab（已迁移到 loadPrefab）' },
-            { pattern: '_setupPrefabUI', label: '_setupPrefabUI（已迁移到 onInit 钩子内逻辑）' },
-            { pattern: '_prefabReady', label: '_prefabReady（已由 RendererState 状态机替代）' },
-        ];
-        deprecatedPatterns.forEach(p => {
-            if (content.includes(p.pattern)) console.log(`  ⚠️  Renderer 存在旧模式: ${p.label}`);
-        });
+        // 推荐模式
+        if (!content.includes('assetManifest')) {
+            console.log('  ⚠️  Layer 2 建议添加: assetManifest getter（如有动态资源）');
+        }
     }
 
-    // 检查 Comp (prefab-components/ 目录)
+    // 检查 Layer 3: PageView.ts
+    const layer3Path = path.join(projectRoot, 'assets', 'scripts', 'views', `${names.pageView}.ts`);
+    if (!fs.existsSync(layer3Path)) {
+        errors.push(`Layer 3 不存在: ${names.pageView}.ts`);
+    } else {
+        const content = fs.readFileSync(layer3Path, 'utf-8');
+
+        const requiredPatterns = [
+            { pattern: '@ccclass', label: '@ccclass 装饰器' },
+            { pattern: 'onBind', label: 'onBind() 生命周期钩子' },
+        ];
+
+        requiredPatterns.forEach(p => {
+            if (!content.includes(p.pattern)) errors.push(`Layer 3 缺少: ${p.label}`);
+        });
+
+        // 推荐模式
+        if (!content.includes('I18n.t')) {
+            console.log('  ⚠️  Layer 3 建议添加: I18n.t() 国际化（如项目启用）');
+        }
+
+        // 禁止模式
+        if (content.includes('@property')) {
+            console.log('  ⚠️  Layer 3 不应声明 @property（应在 Layer 2 中声明）');
+        }
+
+        // Import 规范检查
+        if (content.includes('SteamColors') && !content.includes('ThemeConfig')) {
+            errors.push('Layer 3: SteamColors 应从 ThemeConfig.ts 导入');
+        }
+        if ((content.includes('DESIGN_WIDTH') || content.includes('DESIGN_HEIGHT')) && !content.includes('RendererConfig')) {
+            errors.push('Layer 3: DESIGN_WIDTH/HEIGHT 应从 RendererConfig.ts 导入');
+        }
+    }
+
+    // 检查 Comp (prefab-components/ 目录) — 可选但推荐
     const compPaths = [
         path.join(projectRoot, 'assets', 'scripts', 'prefab-components', `${names.comp}.ts`),
-        path.join(projectRoot, 'assets', 'scripts', 'ui', uiName, `${names.comp}.ts`),
     ];
     const compFile = compPaths.find(p => fs.existsSync(p));
 
-    if (!compFile) {
-        errors.push(`Comp 不存在: ${names.comp}.ts`);
-    } else {
+    if (compFile) {
         const content = fs.readFileSync(compFile, 'utf-8');
-        if (!content.includes('@ccclass')) errors.push(`Comp 缺少 @ccclass 装饰器`);
-        if (!content.includes('@property')) errors.push(`Comp 缺少 @property 声明`);
+        if (!content.includes('@ccclass')) console.log('  ⚠️  Comp 缺少 @ccclass 装饰器');
+        if (!content.includes('@property')) console.log('  ⚠️  Comp 缺少 @property 声明');
     }
 
     if (errors.length > 0) {

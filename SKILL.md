@@ -41,7 +41,7 @@ Phase 1: 结构          Phase 2: 分析          Phase 3: 生成（Cocos 转换
 ┌─────────────┐     ┌─────────────────┐     ┌──────────────────────────┐
 │ 展示 Schema │ ──→ │ 从参考图提取    │ ──→ │ DNA → Cocos 组件映射     │
 │ 三维度字段   │     │ Design DNA JSON │     │ → MCP 创建节点/Prefab    │
-│ 问用户定制   │     │ 问用户调整      │     │ → 生成 PageComp/Renderer │
+│ 问用户定制   │     │ 问用户调整      │     │ → 生成 View.generated.ts │
 └─────────────┘     └─────────────────┘     └──────────────────────────┘
 ```
 
@@ -86,8 +86,8 @@ Phase 1: 结构          Phase 2: 分析          Phase 3: 生成（Cocos 转换
 
 | 降级级别 | 条件 | 输出 |
 |---------|------|------|
-| **L1 完整模式** | MCP 正常连通 | design.md + PageComp.ts + Renderer.ts + MCP 自动生成 Prefab |
-| **L2 文档模式** | MCP 不可用 | design.md + PageComp.ts + Renderer.ts + **Prefab 节点树定义文档**（第4章详细到可手动创建） |
+| **L1 完整模式** | MCP 正常连通 | design.md + View.generated.ts + PageView.ts + MCP 自动生成 Prefab |
+| **L2 文档模式** | MCP 不可用 | design.md + View.generated.ts + PageView.ts + **Prefab 节点树定义文档**（第4章详细到可手动创建） |
 | **L3 最小模式** | MCP 不可用且缺少模板信息 | design.md（9章完整） |
 
 **降级时的 Agent 行为**：
@@ -100,7 +100,7 @@ Phase 1: 结构          Phase 2: 分析          Phase 3: 生成（Cocos 转换
    启动后可重新执行 Prefab 创建步骤。
    ```
 3. design.md 第4章节点树写到**可直接在 Cocos Creator 编辑器中手动创建**的精度（含每个节点的组件类型、属性值、锚点、尺寸）
-4. 所有代码文件（PageComp.ts / Renderer.ts）正常输出，不依赖 MCP
+4. 所有代码文件（View.generated.ts / PageView.ts）正常输出，不依赖 MCP
 
 ---
 
@@ -139,10 +139,21 @@ Phase 1: 结构          Phase 2: 分析          Phase 3: 生成（Cocos 转换
 | 2 | UI 结构协议文档 | `cocos-dna/components/<page>/design.md` | 9章 Markdown（含第1.5章），页面设计数据的唯一存储位置 |
 | 3 | 资产绑定清单 | `cocos-dna/components/<page>/asset-manifest.json` | Sprite UUID 映射 |
 | 4 | AI 绘图 Prompt | `cocos-dna/components/<page>/assets/art-prompts.md` | 美术资源生成指引，产出放 `assets/raw/` |
-| 5 | Prefab 组件脚本 | `assets/scripts/ui/<page>/<Page>Comp.ts` | @property 声明 |
-| 6 | 渲染器脚本 | `assets/scripts/ui/<page>/<Page>Renderer.ts` | DNA 驱动逻辑 |
-| 7 | Prefab 文件 | `assets/resources/prefabs/<page>.prefab` | MCP 自动创建 |
-| 8 | ThemeConfig 更新 | `assets/scripts/config/ThemeConfig.ts` | 全局 tokens 同步 |
+| 5a | **三层架构** — AI 生成层 | `assets/scripts/views/<Page>View.generated.ts` | Layer 2：@property 声明 + assetManifest（AI 可安全覆盖） |
+| 5b | **三层架构** — 业务逻辑层 | `assets/scripts/views/<Page>PageView.ts` | Layer 3：业务逻辑（人写，AI **永不覆盖**） |
+| 5c | Prefab 组件脚本（可选） | `assets/scripts/prefab-components/<Page>PageComp.ts` | @property 声明（辅助 Prefab 编辑器序列化） |
+| 6 | Prefab 文件 | `assets/resources/prefabs/pages/<Page>Page.prefab` | MCP 自动创建 |
+| 7 | ThemeConfig 更新 | `assets/scripts/ui/themed-components/ThemeConfig.ts` | 全局 tokens 同步（SteamColors SSOT） |
+
+### 三层架构
+
+所有页面统一使用 BaseView 三层架构：
+
+| 层级 | 文件 | 职责 | 维护者 |
+|------|------|------|--------|
+| Layer 1 | `BaseView.ts` | 通用基类（状态机 + 资源管理 + Widget 工具） | skill 维护 |
+| Layer 2 | `XxxView.generated.ts` | @property + assetManifest（可安全覆盖） | Codegen / AI |
+| Layer 3 | `XxxPageView.ts` | 业务逻辑（永不覆盖） | 人工 |
 
 ### design.md 章节结构（9章，含第1.5章）
 
@@ -226,10 +237,12 @@ cocos-dna 提供通用运行时基础设施模板，由 skill 统一维护，通
 
 | 模板文件 | 版本 | 职责 |
 |---------|------|------|
-| [`templates/runtime/ResourceManager.ts`](templates/runtime/ResourceManager.ts) | 1.0.0 | 统一资源加载/缓存/分组释放（解决 resources.load 散落 + 零 release 问题） |
-| [`templates/runtime/LayerManager.ts`](templates/runtime/LayerManager.ts) | 1.0.0 | UI 层级隔离：page / popup / effect / guide |
-| [`templates/runtime/EventBus.ts`](templates/runtime/EventBus.ts) | 1.0.0 | 全局事件总线（on/off/emit/once + 单例 + context 绑定） |
-| [`templates/runtime/DebugLogger.ts`](templates/runtime/DebugLogger.ts) | 1.0.0 | 结构化调试日志（module/tag/level + window.\_\_DEBUG\_LOG\_\_ 供 E2E） |
+| [`templates/runtime/core/ResourceManager.ts`](templates/runtime/core/ResourceManager.ts) | 1.0.0 | 统一资源加载/缓存/分组释放（解决 resources.load 散落 + 零 release 问题） |
+| [`templates/runtime/core/LayerManager.ts`](templates/runtime/core/LayerManager.ts) | 1.0.0 | UI 层级隔离：page / popup / effect / guide |
+| [`templates/runtime/core/EventBus.ts`](templates/runtime/core/EventBus.ts) | 1.1.0 | 全局事件总线（on/off/emit/once + 单例 + context 绑定）+ 使用范围规约 + 清理规则 |
+| [`templates/runtime/core/DebugLogger.ts`](templates/runtime/core/DebugLogger.ts) | 1.0.0 | 结构化调试日志（module/tag/level + window.\_\_DEBUG\_LOG\_\_ 供 E2E） |
+| [`templates/runtime/core/UIBinder.ts`](templates/runtime/core/UIBinder.ts) | 1.0.0 | 运行时节点绑定工具（auto/map/component 三种模式，@property 的动态 fallback） |
+| [`templates/runtime/views/BaseView.ts`](templates/runtime/views/BaseView.ts) | 1.1.0 | **视图 Component 基类**（三层架构：runtime → generated → business），支持 @property + 状态机 + 资源管理 + asset-manifest 绑定 |
 
 ### Agent 自动集成时机
 
@@ -244,7 +257,7 @@ cocos-dna 提供通用运行时基础设施模板，由 skill 统一维护，通
 | 能直接在另一个 Cocos DNA 项目里用 | → skill `templates/` |
 | 绑定项目视觉风格/游戏流/业务逻辑 | → 项目 `assets/scripts/` |
 
-**Skill v1 覆盖层**（5 文件）：生命周期（BaseRenderer）+ 资源（ResourceManager）+ 层级（LayerManager）+ 通信（EventBus）+ 调试（DebugLogger）
+**Skill v1.6 覆盖层**（6 模板 + 1 codegen 脚本）：视图基类（BaseView）+ 绑定工具（UIBinder）+ 资源（ResourceManager）+ 层级（LayerManager）+ 通信（EventBus）+ 调试（DebugLogger）+ Codegen（generate-view.js）
 
 **留在项目侧**：GameEvents（事件常量）、GameFlowFSM、UIManager、I18n、DataProvider、ThemeConfig、RendererConfig
 

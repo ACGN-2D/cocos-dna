@@ -154,46 +154,36 @@ export class PageNameComp extends Component {
 }
 ```
 
-### Renderer.ts（渲染器逻辑脚本）
+### PageView.ts（渲染器逻辑脚本）
 
-继承 `BaseRenderer`，采用**双层生命周期**（模板方法模式）+ **RendererState 状态机**将 DNA 设计决策转化为运行时逻辑。
+采用 **BaseView 三层架构**（Layer 1: BaseView → Layer 2: Generated → Layer 3: PageView），将 DNA 设计决策转化为运行时逻辑。
 
-#### 渲染器状态机
+#### BaseView 状态机
 
 ```
-RendererState:  None ──init()──→ Inited ──show()──→ Visible ──hide()──→ Hidden
-                                   ↑                                      │
-                                   └──────────── show() ──────────────────┘
-                Any non-Disposed ──dispose()──→ Disposed（终态，拦截所有操作）
+ViewState:  Idle ──open()──→ Visible ──close()──→ Idle
+            Idle ──destroy()──→ Disposed（终态）
 ```
 
-- `show()` 在 `Disposed` / `None` 下 → `console.error` + 直接 return
-- `hide()` 在非 `Visible` 下 → 安全 noop
-- `dispose()` 在 `Disposed` 下 → 跳过
+- `open()` 执行 `onBind()`（首次） → `onShow(data)` → 节点激活
+- `close()` 执行 `onHide()`（异步退场动画） → `onDispose()` → 节点去激活 → `ResourceManager.releaseGroup()`
 
 #### 驱动层 (Public — 由 GameEntry 统一调度，子类**不得重写**)
 
-| 方法 | 状态转换 | 职责 |
-|------|---------|------|
-| `init(parent)` | None → Inited | 创建根节点、状态检查、调用 `onInit()` |
-| `show(data?)` | Inited/Hidden → Visible | 激活节点、防重复显示、调用 `onShow()` |
-| `async hide()` | Visible → Hidden | **await `onHide()`**（退场动画）→ deactivate 节点 |
-| `update(dt)` | — | 仅 Visible 状态调用 `onUpdate(dt)` |
-| `dispose()` | 任意 → Disposed | ① **递归** `_stopTweensRecursive` 停止所有子节点 Tween → ② 调用 `onDispose()` → ③ destroy 节点树 |
+| 方法 | 职责 |
+|------|------|
+| `open(data?)` | 激活节点、首次绑定、调用 `onShow()` |
+| `close()` | **await `onHide()`**（退场动画）→ `onDispose()` → deactivate → 释放资源 |
 
 #### 业务层 (Hooks — 子类重写)
 
 | 钩子 | 返回类型 | 说明 |
 |------|---------|------|
-| `onInit()` | `void` | **[抽象]** 一次性资源预加载（如图标 SpriteFrame）和 Prefab 实例化 |
-| `onShow(data?)` | `void` | 执行进场动画 `playEnterAnimation()` 和数据绑定 |
-| `async onHide()` | `Promise<void>` | **异步退场动画**（如 0.3s 淡出），完成后 resolve；基类在 resolve 后才 `active=false` |
-| `onUpdate(dt)` | `void` | 驱动粒子/动画帧更新 |
-| `onDispose()` | `void` | 释放子类特有资源、清理引用，解除 DNA 数据引用 |
-
-> **重要**：`hide()` 是 async 的。GameEntry 的 `_switchRenderer` / `_hideCurrentRenderer` 均 `await hide()`，确保退场动画播完再 show 新渲染器。如果子类 `onHide` 无退场动画（默认空实现），await 立即 resolve，零额外开销。
-
-> **dispose 三步顺序**：① `_stopTweensRecursive(root)` 递归停止所有子节点 Tween → ② `onDispose()` 子类释放资源 → ③ `destroy()` 销毁节点树。先 stop 后 dispose 确保子类在 `onDispose()` 中访问节点属性时不会被残留 Tween 回调干扰。子类 `onDispose()` 中无需手动清理 Tween。
+| `onBind()` | `void` | **首次打开**时调用，节点引用绑定、事件注册、子 Prefab 加载 |
+| `onShow(data?)` | `void` | 每次打开时调用，入场动画 + 数据绑定 |
+| `onRefresh(data?)` | `void` | 外部数据刷新（不涉及显隐切换） |
+| `async onHide()` | `Promise<void>` | 异步退场动画（如 0.3s 淡出），完成后 resolve |
+| `onDispose()` | `void` | 释放子类特有资源、清理引用 |
 
 #### 事件监听规范
 
@@ -205,38 +195,54 @@ RendererState:  None ──init()──→ Inited ──show()──→ Visible 
 
 **规范要求**：
 - **优先使用 `node.on()`**：将触摸/鼠标事件绑定在 Prefab 子节点上，dispose 时由 `Node.destroy()` 自动清理，无需手动 off。
-- **若使用 `EventBus.on()`**：子类**必须**在 `onDispose()` 中配对调用 `EventBus.off()`。建议在 `onInit()` 中绑定时保存回调引用，便于 off 时精确匹配。
-- **当前审计结果**：5 个子类均使用 `node.on()` 而非 `EventBus.on()`，dispose 清理已被 `Node.destroy()` 覆盖，风险为低。
+- **若使用 `EventBus.on()`**：子类**必须**在 `onDispose()` 中配对调用 `EventBus.off()`。建议在 `onBind()` 中绑定时保存回调引用，便于 off 时精确匹配。
 
 ```typescript
-// 模板 — 渲染器逻辑
-import { Color, tween, Vec3 } from 'cc';
-import { BaseRenderer, RendererState } from './BaseRenderer';
+// 三层架构 — Layer 2: AI 生成层（可安全覆盖）
+import { _decorator, Label, Sprite } from 'cc';
+import { BaseView } from '../runtime/views/BaseView';
+// ⚠️ SteamColors 从 ThemeConfig 导入
+// import { SteamColors } from '../ui/themed-components/ThemeConfig';
+// ⚠️ DESIGN_WIDTH/HEIGHT 从 RendererConfig 导入
+// import { DESIGN_WIDTH, DESIGN_HEIGHT } from '../core/RendererConfig';
+const { ccclass, property } = _decorator;
 
-export class PageNameRenderer extends BaseRenderer {
+@ccclass('PageNameViewGenerated')
+export class PageNameViewGenerated extends BaseView {
+    protected get viewName() { return 'PageNameView'; }
+    protected get resourceGroup() { return 'page-name'; }
+
+    // @property 声明（对应 Prefab 节点树）
+    @property(Label) txtTitle: Label = null!;
+    @property(Sprite) bgSprite: Sprite = null!;
+}
+```
+
+```typescript
+// 三层架构 — Layer 3: 业务逻辑层（永不覆盖）
+import { _decorator } from 'cc';
+import { PageNameViewGenerated } from './PageNameView.generated';
+const { ccclass } = _decorator;
+
+@ccclass('PageNamePageView')
+export class PageNamePageView extends PageNameViewGenerated {
     // ═══ DNA Dimension 1: design_system tokens ═══
-    private readonly COLORS = {
-        primary: new Color().fromHEX('#...'),     // ← DNA: color.primary.hex
-        accent: new Color().fromHEX('#...'),      // ← DNA: color.accent.hex
-    };
     private readonly MOTION = {
         easing: 'quadOut',    // ← DNA: motion.easing
         normal: 0.3,          // ← DNA: motion.duration_scale.normal
     };
 
-    protected onInit(): void { /* 初始化颜色 + 动态效果 */ }
-    protected onShow(): void { /* 入场动画 */ }
-    protected onUpdate(dt: number): void { /* 驱动粒子/动画帧更新 */ }
-
-    // 退场动画示例（可选重写）
+    protected onBind(): void {
+        // 事件绑定 + 子 Prefab 加载
+    }
+    protected onShow(data?: any): void {
+        // 入场动画 + 数据填充
+    }
     protected async onHide(): Promise<void> {
-        // 如果需要退场动画，用 Promise 包装 tween：
-        // await new Promise<void>(resolve => {
-        //     tween(this._root!)
-        //         .to(0.3, { scale: new Vec3(0.95, 0.95, 1) }, { easing: 'quadIn' })
-        //         .call(() => resolve())
-        //         .start();
-        // });
+        // 退场动画（可选）
+    }
+    protected onDispose(): void {
+        // 清理引用
     }
 }
 ```

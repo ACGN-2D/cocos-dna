@@ -122,8 +122,8 @@
 ## 第4章：Cocos 节点树
 
 > **Prefab 路径**：`assets/resources/prefabs/pages/<PageName>Page.prefab`
-> **组件脚本**：`<PageName>PageComp.ts`（挂载到根节点）
-> **渲染器**：`<PageName>Renderer.ts`（extends BaseRenderer）
+> **组件脚本**：`<PageName>PageComp.ts`（挂载到根节点，@property 序列化辅助）
+> **三层架构**：`<PageName>View.generated.ts`（Layer 2, extends BaseView）+ `<PageName>PageView.ts`（Layer 3, 业务逻辑）
 > **设计分辨率**：<宽> × <高>（原点屏幕中心）
 
 ```

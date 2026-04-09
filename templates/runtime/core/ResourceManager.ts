@@ -17,9 +17,9 @@
  *  // 释放整组（在 Renderer.onDispose 中调用）
  *  ResourceManager.releaseGroup('battle');
  * 
- * 与 BaseRenderer / BaseView 集成：
+ * 与 BaseView 集成：
  *  - loadPrefab() / loadImageToSprite() 内部调用 ResourceManager.load()
- *  - onDispose() / dispose() 中调用 ResourceManager.releaseGroup(groupName)
+ *  - onDispose() 中调用 ResourceManager.releaseGroup(groupName)
  * 
  * 当前阶段刻意不做的事（避免过度设计）：
  *  - 引用计数（ref-count）— 当前项目资源归属清晰，group release 足够
