@@ -228,6 +228,8 @@ cocos-dna 提供通用运行时基础设施模板，由 skill 统一维护，通
 |---------|------|------|
 | [`templates/runtime/ResourceManager.ts`](templates/runtime/ResourceManager.ts) | 1.0.0 | 统一资源加载/缓存/分组释放（解决 resources.load 散落 + 零 release 问题） |
 | [`templates/runtime/LayerManager.ts`](templates/runtime/LayerManager.ts) | 1.0.0 | UI 层级隔离：page / popup / effect / guide |
+| [`templates/runtime/EventBus.ts`](templates/runtime/EventBus.ts) | 1.0.0 | 全局事件总线（on/off/emit/once + 单例 + context 绑定） |
+| [`templates/runtime/DebugLogger.ts`](templates/runtime/DebugLogger.ts) | 1.0.0 | 结构化调试日志（module/tag/level + window.\_\_DEBUG\_LOG\_\_ 供 E2E） |
 
 ### Agent 自动集成时机
 
@@ -241,6 +243,10 @@ cocos-dna 提供通用运行时基础设施模板，由 skill 统一维护，通
 |---------|------|
 | 能直接在另一个 Cocos DNA 项目里用 | → skill `templates/` |
 | 绑定项目视觉风格/游戏流/业务逻辑 | → 项目 `assets/scripts/` |
+
+**Skill v1 覆盖层**（5 文件）：生命周期（BaseRenderer）+ 资源（ResourceManager）+ 层级（LayerManager）+ 通信（EventBus）+ 调试（DebugLogger）
+
+**留在项目侧**：GameEvents（事件常量）、GameFlowFSM、UIManager、I18n、DataProvider、ThemeConfig、RendererConfig
 
 详细集成步骤见 → [runtime-integration.md](references/runtime-integration.md)
 

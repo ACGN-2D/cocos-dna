@@ -6,14 +6,16 @@
  * 
  * 目标目录结构（与项目 scripts/ 子目录名对应）：
  *   runtime/views/  → BaseRenderer.ts      （对应 scripts/views/ 下子类的基类）
- *   runtime/core/   → ResourceManager.ts   （对应 scripts/core/ 使用的基础设施）
- *                     LayerManager.ts
+ *   runtime/core/   → ResourceManager.ts   （资源加载/缓存/分组释放）
+ *                     LayerManager.ts       （UI 层级隔离）
+ *                     EventBus.ts           （全局事件总线）
+ *                     DebugLogger.ts        （结构化调试日志）
  * 
  * 同步策略：
  *  - 新文件：直接复制
  *  - 已存在且内容相同：跳过
  *  - 已存在但内容不同：提示差异，--force 时覆盖
- *  - 项目自有文件（EventBus.ts 等）：永远不覆盖
+ *  - 项目自有文件（GameEvents.ts 等）：永远不覆盖
  * 
  * 用法：
  *   node sync-runtime.js --project <project-root>           # 预览模式（仅显示变更）
@@ -38,6 +40,8 @@ const path = require('path');
 const TEMPLATE_FILES = [
     { name: 'ResourceManager.ts', targetSubdir: 'runtime/core' },
     { name: 'LayerManager.ts',    targetSubdir: 'runtime/core' },
+    { name: 'EventBus.ts',        targetSubdir: 'runtime/core' },
+    { name: 'DebugLogger.ts',     targetSubdir: 'runtime/core' },
     { name: 'BaseRenderer.ts',    targetSubdir: 'runtime/views' },
 ];
 
