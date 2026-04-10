@@ -73,12 +73,41 @@ Phase 1: 结构          Phase 2: 分析          Phase 3: 生成（Cocos 转换
 
 1. **读取设计约束** — 读取 `cocos-dna/design-dna.json`（SSOT）+ 已有 components/ 文档作为风格基线
 2. **确认输入** — 页面名称（英文+中文）、设计分辨率、UI 参考图
-3. **分析图片 → 匹配 DNA** — 将图片元素匹配到 DNA 的颜色、字体、间距等
-4. **⚠️ 询问动态效果（不可跳过）** — 见下方「动态效果确认」
-5. **DNA → Cocos 组件映射** — 按映射表确定层级结构和组件分配
-6. **输出文档 + 代码** — 见下方「产出物清单」
-7. **MCP 创建 Prefab** — 按 MCP 调用序列自动创建节点树
-8. **验证** — 按验证清单自检，见 → [references/output-spec.md](references/output-spec.md)
+3. **⚠️ 初始化页面目录结构（不可跳过）** — 见下方「页面目录初始化」
+4. **分析图片 → 匹配 DNA** — 将图片元素匹配到 DNA 的颜色、字体、间距等
+5. **⚠️ 询问动态效果（不可跳过）** — 见下方「动态效果确认」
+6. **DNA → Cocos 组件映射** — 按映射表确定层级结构和组件分配
+7. **输出文档 + 代码** — 见下方「产出物清单」
+8. **MCP 创建 Prefab** — 按 MCP 调用序列自动创建节点树
+9. **验证** — 按验证清单自检，见 → [references/output-spec.md](references/output-spec.md)
+
+### ⚠️ 页面目录初始化（必须在输出任何文件前执行）
+
+> **关键规则**：进入 Phase 3 后，Agent **必须首先**创建完整的页面目录结构，再开始编写文档和代码。
+> 不完整的目录结构会导致后续 `resolve-asset-uuids.js`、AI 绘图、验证等环节断裂。
+
+**必须创建的目录和文件**：
+
+```
+cocos-dna/components/<page>/
+├── design.md                  ← 步骤 7 输出
+├── asset-manifest.json        ← 步骤 7 输出
+├── assets/
+│   ├── art-prompts.md         ← 步骤 7 输出（AI 绘图 Prompt，基于 design.md 第6章资源清单）
+│   └── raw/
+│       └── .gitkeep           ← 占位，后续 AI 生成的原始资产放在此目录
+└── references/
+    └── README.md              ← 参考图索引（可从 examples/_example-page/references/README.md 复制模板）
+```
+
+**Agent 检查清单**（步骤 3）：
+- [ ] `cocos-dna/components/<page>/` 目录已创建
+- [ ] `cocos-dna/components/<page>/assets/` 目录已创建
+- [ ] `cocos-dna/components/<page>/assets/raw/.gitkeep` 已创建
+- [ ] `cocos-dna/components/<page>/references/` 目录已创建
+- [ ] `design-dna.json` 的 `pages` 索引中已添加新页面条目
+
+> 💡 **提示**：可参考 `examples/_example-page/` 的目录结构。`assets/art-prompts.md` 在步骤 7 输出文档时与 design.md、asset-manifest.json 一起编写。
 
 ### ⚠️ MCP 降级策略
 
@@ -377,30 +406,59 @@ sync-runtime ─→ AI 写 design.md + manifest + 代码
  B3   design2prefab.js        可选 — 如需重建 Prefab
 ```
 
-#### 场景 C：仅重建 Prefab（设计修改后）
+#### 场景 C：设计迭代（用户反馈修正后）
+
+> **典型触发**：Phase 3 首次输出 design.md 后，用户审阅并提出修改意见（如调整布局、增删节点、修改配色等），Agent 需要同步更新所有受影响的产出物。
+
+```
+步骤  操作                      说明                                     必须/可选
+────────────────────────────────────────────────────────────────────────────────────
+ C1   — (AI 手写) —             更新 design.md（按用户反馈修改受影响章节）    必须
+ C2   — (AI 手写) —             同步更新 asset-manifest.json               必须（如资源清单有变化）
+ C3   — (AI 手写) —             同步更新 assets/art-prompts.md             必须（如资源清单有变化）
+ C4   resolve-asset-uuids.js    重新扫描 → 更新 UUID 映射                  必须（manifest 变化时）
+ C5   generate-view.js          重新生成 .generated.ts                     必须（manifest 变化时）
+ C6   design2prefab.js --dry-run 预览节点树变化                            推荐
+ C7   design2prefab.js          正式重建 Prefab                            必须（节点树有变化时）
+ C8   ui-dev-workflow.js        重新验证 V1-V4                             推荐
+```
+
+**⚠️ 同步更新规则（不可违反）**：
+
+| design.md 变化类型 | asset-manifest.json | art-prompts.md | View.generated.ts | Prefab |
+|-------------------|---------------------|----------------|-------------------|--------|
+| 仅文案/字号调整 | — | — | — | 重建 |
+| 增删/重命名节点 | 同步增删条目 | 同步增删 Prompt | 重新生成 | 重建 |
+| 增删/替换图片资源 | 同步增删条目 | 同步增删 Prompt | 重新生成 | 重建 |
+| 布局/位置调整 | — | — | — | 重建 |
+| 配色/风格调整 | — | 更新 Prompt 中的风格描述 | — | 重建 |
+
+> 💡 **简记**：design.md 是 SSOT。**凡 design.md 第6章（资源清单）有变化，asset-manifest.json 和 art-prompts.md 必须联动更新**。Agent 禁止只改 design.md 而忘记同步其他文件。
+
+#### 场景 D：仅重建 Prefab（小幅调整后）
 
 ```
 步骤  脚本                    说明
 ─────────────────────────────────────────────────────────────
- C1   design2prefab.js --dry-run   先预览节点树变化
- C2   design2prefab.js             确认无误后正式构建
+ D1   design2prefab.js --dry-run   先预览节点树变化
+ D2   design2prefab.js             确认无误后正式构建
 ```
 
-#### 场景 D：仅验证产出物完整性
-
-```
-步骤  脚本                    说明
-─────────────────────────────────────────────────────────────
- D1   ui-dev-workflow.js      运行 V1-V4 验证，查看哪些产出物缺失或不一致
-```
-
-#### 场景 E：新项目初始化
+#### 场景 E：仅验证产出物完整性
 
 ```
 步骤  脚本                    说明
 ─────────────────────────────────────────────────────────────
- E1   sync-runtime.js --apply      同步全部 runtime 模板到项目
- E2   进入场景 A（A2 开始）
+ E1   ui-dev-workflow.js      运行 V1-V4 验证，查看哪些产出物缺失或不一致
+```
+
+#### 场景 F：新项目初始化
+
+```
+步骤  脚本                    说明
+─────────────────────────────────────────────────────────────
+ F1   sync-runtime.js --apply      同步全部 runtime 模板到项目
+ F2   进入场景 A（A2 开始）
 ```
 
 ### 脚本依赖关系图

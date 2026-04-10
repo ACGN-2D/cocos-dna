@@ -212,7 +212,14 @@ interface BackgroundEffectSpec {
 
 ## 输出验证清单
 
-### 完整性
+### 目录结构完整性
+- [ ] `cocos-dna/components/<page>/` 目录已创建
+- [ ] `cocos-dna/components/<page>/assets/art-prompts.md` 已生成（AI 绘图 Prompt）
+- [ ] `cocos-dna/components/<page>/assets/raw/.gitkeep` 已创建（原始资产占位目录）
+- [ ] `cocos-dna/components/<page>/references/` 目录已创建
+- [ ] `design-dna.json` → `pages` 索引中包含本页面条目
+
+### 文档完整性
 - [ ] 9 个章节全部输出（第1~8章 + 第1.5章参考图溯源）
 - [ ] 第1.5章参考图列表和设计决策追踪已填写
 - [ ] ASCII 线框图包含所有可见元素，附布局要点表格
