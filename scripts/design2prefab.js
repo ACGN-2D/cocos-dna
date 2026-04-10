@@ -584,6 +584,12 @@ function _parsePropertyLine(line, spec) {
         spec.comp = compMatch[1];
         return;
     }
+
+    // 初始: active=false / 初始: 收起状态 (隐含 active=false 的情况需要在节点行 inline 解析)
+    if (/^初始:\s*active\s*=\s*false/i.test(clean)) {
+        spec.active = false;
+        return;
+    }
 }
 
 // ── 内部: Widget 规格解析 ──
@@ -875,6 +881,15 @@ function buildOffline(nodeTree) {
             b.addButton(info.nodeIdx);
         }
 
+        // active=false — 设置节点初始隐藏
+        if (spec.active === false) {
+            // 查找刚生成的 cc.Node 对象并设置 _active
+            const nodeObj = b.objects[info.nodeIdx];
+            if (nodeObj && nodeObj.__type__ === 'cc.Node') {
+                nodeObj._active = false;
+            }
+        }
+
         // 递归子节点
         for (const child of spec.children || []) {
             buildNode(child, spec);
@@ -1134,21 +1149,51 @@ if (require.main === module) {
     console.log('');
 
     if (flags.dryRun) {
-        // ── dry-run: 打印节点树 ──
-        printNodeTree(nodeTree);
-        console.log('');
+        // ── dry-run: 打印所有节点树 ──
+        const allTrees = parseAllNodeTrees(content);
+        console.log(`[dry-run] Found ${allTrees.length} Prefab tree(s)\n`);
+        for (let i = 0; i < allTrees.length; i++) {
+            const tree = allTrees[i];
+            console.log(`──── Tree ${i + 1}: ${tree.name} (${countNodes(tree)} nodes) ────`);
+            printNodeTree(tree);
+            console.log('');
+        }
         console.log('[dry-run] No changes made.');
         process.exit(0);
     }
 
     if (flags.offline) {
         // ── offline: 生成 .prefab JSON ──
-        const json = buildOffline(nodeTree);
-        const pascalName = _toPascalCase(pageId);
-        const outPath = path.join(projectRoot, 'assets', 'resources', 'prefabs', 'pages', `${pascalName}Page.prefab`);
-        fs.mkdirSync(path.dirname(outPath), { recursive: true });
-        fs.writeFileSync(outPath, JSON.stringify(json, null, 2));
-        console.log(`[offline] Written: ${outPath} (${json.length} objects)`);
+        // 解析所有代码块（支持多 Prefab：如 MapPage + MapNode）
+        const allTrees = parseAllNodeTrees(content);
+        console.log(`[offline] Found ${allTrees.length} Prefab tree(s) in design.md`);
+
+        for (let i = 0; i < allTrees.length; i++) {
+            const tree = allTrees[i];
+            const json = buildOffline(tree);
+            const rootName = tree.name; // e.g. "MapPage", "MapNode"
+
+            // 推断输出路径:
+            //   - 名字以 "Page" 结尾 → pages/ 目录
+            //   - 否则 → components/ 目录
+            const subDir = /Page$/i.test(rootName) ? 'pages' : 'components';
+            const outPath = path.join(projectRoot, 'assets', 'resources', 'prefabs', subDir, `${rootName}.prefab`);
+            fs.mkdirSync(path.dirname(outPath), { recursive: true });
+            fs.writeFileSync(outPath, JSON.stringify(json, null, 2));
+            console.log(`[offline] [${i + 1}/${allTrees.length}] Written: ${outPath} (${json.length} objects)`);
+        }
+
+        // 向后兼容：如果只有一个代码块且名字不含 "Page"，也在 pages/ 目录按旧逻辑输出
+        if (allTrees.length === 1 && !/Page$/i.test(allTrees[0].name)) {
+            const pascalName = _toPascalCase(pageId);
+            const legacyPath = path.join(projectRoot, 'assets', 'resources', 'prefabs', 'pages', `${pascalName}Page.prefab`);
+            if (!fs.existsSync(legacyPath)) {
+                const json = buildOffline(allTrees[0]);
+                fs.writeFileSync(legacyPath, JSON.stringify(json, null, 2));
+                console.log(`[offline] Legacy compat: ${legacyPath}`);
+            }
+        }
+
         process.exit(0);
     }
 
