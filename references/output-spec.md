@@ -247,7 +247,6 @@ interface BackgroundEffectSpec {
 | **输出文件** | `<filename>.png` |
 | **尺寸** | <宽> × <高> px |
 | **格式** | PNG (透明背景/非透明) |
-| **九宫格** | Top: N, Bottom: N, Left: N, Right: N |
 | **用途** | <具体用途> |
 | **绑定节点** | <Prefab 节点名> |
 
@@ -256,7 +255,6 @@ interface BackgroundEffectSpec {
 （独立代码块，一个资源一个代码块，不可多个资源共用）
 
 ### 中文参考（可选）
-### 后处理 / 制作说明（可选）
 ```
 
 ### ⛔ 禁止写法
@@ -266,7 +264,9 @@ interface BackgroundEffectSpec {
 | `### 2-5. 血条和能量条`（合并标题） | 无法对应具体资源 | 每个资源单独 `## 资源 #N:` |
 | 多个 Prompt 写在同一个代码块内 | 无法区分哪段对应哪个资源 | 每个资源独立 Prompt 代码块 |
 | Prompt 节标题不含文件名 | 无法与清单表格快速对照 | 标题格式：`## 资源 #N: 描述 — filename.png` |
-| 缺少属性表直接写 Prompt | 缺失尺寸/格式/九宫格等关键信息 | 必须先列属性表再写 Prompt |
+| 缺少属性表直接写 Prompt | 缺失尺寸/格式等关键信息 | 必须先列属性表再写 Prompt |
+| 属性表包含九宫格参数 / 路径信息 | 与 asset-manifest.json 冗余，维护两份易不一致 | 九宫格/路径/loadType 等技术参数只在 asset-manifest.json 中定义 |
+| 包含「后处理 / 制作说明」节 | 路径和切分参数已在 asset-manifest.json，Prompt 文件不做路径管理 | 删除该节，路径统一看 asset-manifest.json |
 
 ### 对应关系规则
 
