@@ -788,6 +788,9 @@ function buildOffline(nodeTree) {
         // Widget
         if (spec.widget) compIdxs.push(nextIdx++);
 
+        // Layout (HORIZONTAL / VERTICAL — 从 design.md 的 Layout: 属性解析)
+        if (spec._layout) compIdxs.push(nextIdx++);
+
         // Button
         if (spec.types.includes('Button')) compIdxs.push(nextIdx++);
 
@@ -856,6 +859,15 @@ function buildOffline(nodeTree) {
                 spec.widget.left,
                 spec.widget.right
             );
+        }
+
+        // Layout (HORIZONTAL=1, VERTICAL=2)
+        if (spec._layout) {
+            const layoutType = spec._layout === 'VERTICAL' ? 2 : 1;
+            const spacingX = spec._layoutSpacing || 0;
+            const spacingY = spec._layoutSpacingY || spec._layoutSpacing || 0;
+            // resizeMode=0 (NONE) — 容器尺寸固定，不随子节点变化
+            b.addLayout(info.nodeIdx, layoutType, spacingX, spacingY, 0);
         }
 
         // Button
