@@ -211,6 +211,93 @@ AI 绘图          原资产存放              放入正式目录              
                                       └────────────────────────┘
 ```
 
+> **Smart Discovery 简化流程**：资产放入 `assets/` 目录的*任意合理位置*后，运行 `resolve-asset-uuids.js`，脚本会自动发现资产、修正 `assetPath`、填充 UUID。无需严格按 manifest 预设路径放置。
+
+---
+
+## 四-B、Smart Discovery 规范 (v2.0)
+
+### 问题背景
+
+Phase 3 设计阶段先生成 `asset-manifest.json`（`assetPath` 基于目录规范预设），美术资源后续异步、逐步生成。两者之间存在**时序断裂**：
+
+1. **路径猜错** — manifest 预设 `resources/textures/main-menu/`，实际放 `textures/common/buttons/`
+2. **资源重命名** — manifest 记录 `4.1 主菜单背景.png`，实际规范名 `main_menu_bg.png`
+3. **低优先级目录** — NanoBanana（AI 原始生成）、raw（原始资产）被误选为最终路径
+
+### 查找策略（三级 fallback）
+
+`resolve-asset-uuids.js` v2.0 的 `locateAsset()` 按以下顺序查找：
+
+```
+Step 1: 精确路径
+  按 assetPath 查找文件
+  ├─ 找到 + 非低优先级目录 → ✅ 直接使用
+  ├─ 找到 + 低优先级目录   → 继续 Step 2（寻找更优候选）
+  └─ 未找到                → 继续 Step 2
+
+Step 2a: 精确 filename 匹配
+  按 filename（如 "btn_primary_bg.png"）在 assets/ 全局索引中查找
+  ├─ 找到 + 有非低优先级候选 → ✅ selectBestCandidate
+  └─ 全部是低优先级或未找到  → 继续 Step 2b
+
+Step 2b: id 关键词模糊匹配
+  从 id 提取关键词：
+    1. 去掉前缀: bg_ / icon_ / btn_ / fx_
+    2. 按 _ 分词，过滤长度<3的短词
+    3. 文件名必须包含所有关键词
+  例: id="bg_main_menu" → 关键词 ["main","menu"] → 匹配 "main_menu_bg.png" ✅
+  ├─ 找到 → ✅ selectBestCandidate
+  └─ 未找到 → ❌ 使用精确路径结果（即使低优先级）或标记 missing
+```
+
+### 优先级评分
+
+`buildAssetIndex()` 为每个文件计算优先级分数（数字越小越优先）：
+
+| 目录模式 | 基础 priority | 说明 |
+|---------|:---:|------|
+| `resources/textures/` | 3 | 动态加载标准目录 |
+| `textures/pages/` | 4 | 页面专属静态目录 |
+| `textures/common/` | 5 | 全局复用静态目录 |
+| `textures/<other>/` | 6 | 其他 textures 子目录 |
+| 其他 assets/ 目录 | 10 | 默认 |
+| NanoBanana\* / raw/ / cocos-dna/ | 50 | 低优先级（原始/设计目录） |
+
+`selectBestCandidate()` 在基础 priority 上叠加 **loadType 偏好**（权重 ±5）：
+
+| loadType | 调整 | 效果 |
+|----------|------|------|
+| `static` + 非 resources 目录 | score -= 5 | 优先 `textures/`（静态引用） |
+| `dynamic` + resources 目录 | score -= 5 | 优先 `resources/textures/`（动态加载） |
+
+### 自动修正行为
+
+当 Smart Discovery 找到更优候选时，自动写回 manifest：
+- `assetPath` → 更新为发现的相对路径
+- `sourceFile` → 同步更新（如原值等于旧 assetPath）
+- `uuid` / `spriteFrameUuid` → 从新路径的 .meta 提取
+- `status` → `ready` 或 `size_mismatch`（如尺寸不符但 UUID 仍填充）
+
+### Agent 执行规范
+
+**何时运行**：
+- 每次美术资源有更新（新增/移动/重命名）
+- Phase 3 生成 Prefab **前**必须先运行
+- `--check` 模式可预览变更而不写入
+
+**命令**：
+```bash
+# 处理所有页面
+node .codebuddy/skills/cocos-dna/scripts/resolve-asset-uuids.js --project <path> --verbose
+
+# 只处理指定页面
+node .codebuddy/skills/cocos-dna/scripts/resolve-asset-uuids.js --project <path> --page main-menu --verbose
+
+# 预览模式（不写入）
+node .codebuddy/skills/cocos-dna/scripts/resolve-asset-uuids.js --project <path> --check --verbose
+```
+
 - **原资产目录** `cocos-dna/components/<page>/assets/raw/` — 保存 AI 生成的原始图片，不参与 Cocos 构建
 - `sourceFile` 字段记录原资产路径，建立设计产物→最终资产的可追溯关联。原图可能需要去背景等后处理后再放入正式目录
 - AI 生成时 prompt 已指定精确尺寸，**不需要裁切/缩放**。尺寸不符应调整 prompt 重新生成

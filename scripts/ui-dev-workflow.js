@@ -34,10 +34,26 @@ function toPascal(kebab) {
     return kebab.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join('');
 }
 
+/**
+ * 历史页面别名映射表
+ * key: page-id (kebab-case)
+ * value: 实际 Prefab 文件名前缀（不含 .prefab 后缀）
+ *
+ * 新页面不应添加到此表中 — 必须严格遵循 <PascalName>Page 命名规则。
+ * 仅当已有 Prefab 因历史原因无法重命名时才在此注册。
+ */
+const PREFAB_ALIAS_MAP = {
+    'route-map': 'MapPage',   // 历史遗留: RouteMapPage → MapPage
+};
+
 function getNames(uiName) {
     const pascal = toPascal(uiName);
+    const defaultPrefab = `${pascal}Page`;
+    const prefab = PREFAB_ALIAS_MAP[uiName] || defaultPrefab;
     return {
-        prefab: `${pascal}Page`,
+        prefab,
+        prefabDefault: defaultPrefab,  // 规范命名（用于提示信息）
+        isAlias: !!PREFAB_ALIAS_MAP[uiName],
         viewGenerated: `${pascal}View.generated`,
         pageView: `${pascal}PageView`,
         comp: `${pascal}PageComp`,
@@ -113,12 +129,24 @@ function validatePrefab(projectRoot, uiName) {
     const prefabFile = path.join(projectRoot, 'assets', 'resources', 'prefabs', 'pages', `${names.prefab}.prefab`);
 
     if (!fs.existsSync(prefabFile)) {
-        console.error(`  ❌ Prefab 不存在: ${prefabFile}`);
-        return { valid: false, errors: ['Prefab 文件不存在'] };
+        // 如果使用别名也找不到，给出更明确的提示
+        const hint = names.isAlias
+            ? `（已通过别名映射查找 "${names.prefab}.prefab"，规范名为 "${names.prefabDefault}.prefab"）`
+            : `\n    💡 提示: Prefab 文件名必须为 <PascalName>Page.prefab，即 "${names.prefabDefault}.prefab"` +
+              `\n       如果文件名因历史原因不同，请在 ui-dev-workflow.js 的 PREFAB_ALIAS_MAP 中注册别名`;
+        console.error(`  ❌ Prefab 不存在: ${prefabFile}${hint}`);
+        return { valid: false, errors: [`Prefab 文件不存在: ${names.prefab}.prefab`] };
+    }
+
+    const errors = [];
+    const warnings = [];
+
+    // 命名一致性检查
+    if (names.isAlias) {
+        warnings.push(`Prefab 使用别名映射: "${names.prefab}" (规范名应为 "${names.prefabDefault}")，建议新页面严格遵循命名规范`);
     }
 
     const content = fs.readFileSync(prefabFile, 'utf-8');
-    const errors = [];
 
     // 检查 UITransform 组件
     if (!content.includes('cc.UITransform')) {
@@ -157,8 +185,9 @@ function validatePrefab(projectRoot, uiName) {
     } else {
         console.log('  ✅ Prefab 验证通过');
     }
+    warnings.forEach(w => console.log(`  ⚠️  ${w}`));
 
-    return { valid: errors.length === 0, errors };
+    return { valid: errors.length === 0, errors, warnings };
 }
 
 // ==================== V3: View 验证（三层架构） ====================
@@ -391,6 +420,6 @@ function main() {
 }
 
 // 导出供程序化调用
-module.exports = { validateDesignDoc, validatePrefab, validateCode, validateTests, runValidation };
+module.exports = { validateDesignDoc, validatePrefab, validateCode, validateTests, runValidation, getNames, toPascal, PREFAB_ALIAS_MAP };
 
 if (require.main === module) main();

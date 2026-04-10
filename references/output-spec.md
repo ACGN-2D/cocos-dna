@@ -242,6 +242,9 @@ interface BackgroundEffectSpec {
 - [ ] 组件类型正确
 - [ ] 位置基于设计分辨率
 - [ ] Widget 配置合理
+- [ ] **每个 Group/Container/Row 容器节点声明了 `[Layout]` 组件或子节点有显式 `Position`**
+- [ ] **多子节点容器中，子节点 Position 不全为 (0,0)**（防止重叠）
+- [ ] **Layout spacing 值已明确标注**（不省略、不留默认 0）
 
 ### i18n 双语
 - [ ] 所有 Label 同时列出中文和英文

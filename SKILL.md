@@ -137,7 +137,7 @@ Phase 1: 结构          Phase 2: 分析          Phase 3: 生成（Cocos 转换
 |---|------|------|------|
 | 1 | Design DNA JSON | `cocos-dna/design-dna.json` | **全局设计 token SSOT**（色彩/字体/间距/动效/风格）+ 页面轻量索引。**禁止**在此存储页面级设计详情 |
 | 2 | UI 结构协议文档 | `cocos-dna/components/<page>/design.md` | 9章 Markdown（含第1.5章），页面设计数据的唯一存储位置 |
-| 3 | 资产绑定清单 | `cocos-dna/components/<page>/asset-manifest.json` | Sprite UUID 映射 |
+| 3 | 资产绑定清单 | `cocos-dna/components/<page>/asset-manifest.json` | Sprite UUID 映射。运行 `resolve-asset-uuids.js` Smart Discovery 自动同步 |
 | 4 | AI 绘图 Prompt | `cocos-dna/components/<page>/assets/art-prompts.md` | 美术资源生成指引，产出放 `assets/raw/` |
 | 5a | **三层架构** — AI 生成层 | `assets/scripts/views/<Page>View.generated.ts` | Layer 2：@property 声明 + assetManifest（AI 可安全覆盖） |
 | 5b | **三层架构** — 业务逻辑层 | `assets/scripts/views/<Page>PageView.ts` | Layer 3：业务逻辑（人写，AI **永不覆盖**） |
@@ -225,7 +225,7 @@ Phase 1: 结构          Phase 2: 分析          Phase 3: 生成（Cocos 转换
 | [dna-cocos-mapping.md](references/dna-cocos-mapping.md) | DNA→Cocos 映射表 + MCP 流程 + 代码模板 + 路径渲染指南 | Phase 3 执行映射与代码生成 |
 | [output-spec.md](references/output-spec.md) | design.md 9章详细定义（含第1.5章）+ 动效接口 + 验证清单 | Phase 3 编写 design.md、最终验证 |
 | [node-spec.md](references/node-spec.md) | 节点命名规范、节点信息格式 | Phase 3 构建第4/6章节点树 |
-| [asset-binding.md](references/asset-binding.md) | 资产绑定协议、Schema、状态机、**静态 vs 动态资源目录决策** | Phase 3 生成第6.5章 |
+| [asset-binding.md](references/asset-binding.md) | 资产绑定协议、Schema、状态机、静态 vs 动态资源目录决策、**Smart Discovery 规范** | Phase 3 生成第6.5章、资产同步 |
 | `examples/_example-page/`（skill 目录下） | 完整页面目录结构示例（design.md 9章 + asset-manifest + references + art-prompts） | 理解输出格式、新页面目录结构 |
 | [cocos-constraints.md](references/cocos-constraints.md) | Cocos 技术栈禁止清单与约束 | 代码生成/任务规划时自检 |
 | [validate-workflow.md](references/validate-workflow.md) | V1-V4 验证规范（设计文档/Prefab/代码/测试） | Phase 3 完成后自动验证 |
@@ -263,13 +263,180 @@ cocos-dna 提供通用运行时基础设施模板，由 skill 统一维护，通
 
 详细集成步骤见 → [runtime-integration.md](references/runtime-integration.md)
 
+## 资产同步与 Prefab 生成工作流
+
+### 资产时序问题与解决方案
+
+Phase 3 设计阶段先生成 `asset-manifest.json`（预设路径），美术资源后续**异步、逐步**生成。两者之间存在时序断裂：
+
+| 问题 | 表现 | 解决 |
+|------|------|------|
+| 路径猜错 | manifest 预设 `resources/textures/main-menu/`，实际放在 `textures/common/buttons/` | Smart Discovery 自动纠正 |
+| 资源重命名 | manifest 记录 `4.1 主菜单背景.png`，实际规范名 `main_menu_bg.png` | 按 id 关键词模糊匹配 |
+| UUID 缺失 | 文件已存在但 manifest 中 uuid 为 null | resolve-asset-uuids 从 .meta 提取 |
+| 低优先级目录 | NanoBanana/raw/ 等原始目录被误选 | 优先级排序 + 自动切换到正式目录 |
+
+### 完整流水线
+
+```
+Phase 3 设计       美术资源生成         资产同步              Prefab 生成
+┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  ┌──────────────────┐
+│ design.md    │  │ AI 绘图/手工 │  │ resolve-asset-   │  │ design2prefab.js │
+│ + asset-     │→ │ 放入 assets/ │→ │ uuids.js v2.0    │→ │ 读 design.md #4  │
+│   manifest   │  │ 任意合理目录 │  │ Smart Discovery  │  │ + asset-manifest │
+│ (预设路径)   │  │ .meta 自动生 │  │ 自动修正+填UUID  │  │ → MCP/Offline    │
+└──────────────┘  └──────────────┘  └──────────────────┘  └──────────────────┘
+```
+
+### resolve-asset-uuids.js v2.0 — Smart Discovery
+
+资产同步的核心工具。详细算法见 → [asset-binding.md](references/asset-binding.md)
+
+**查找策略（按优先级）**：
+1. **精确路径** — 按 `assetPath` 查找，非低优先级目录则直接使用
+2. **精确 filename** — 按 `filename` 在 `assets/` 全局索引中查找
+3. **id 模糊匹配** — 从 `id` 提取关键词（去掉 bg\_/icon\_/btn\_/fx\_ 前缀），匹配文件名包含所有关键词的文件
+
+**loadType 路径偏好**：
+- `static` → 优先 `assets/textures/`（非 resources）
+- `dynamic` → 优先 `assets/resources/textures/`
+
+**Agent 执行时机**：
+- 每次美术资源有更新（新增/移动/重命名）后运行
+- Phase 3 生成 Prefab 前必须先运行
+- 运行命令：`node .codebuddy/skills/cocos-dna/scripts/resolve-asset-uuids.js --project <path> [--page <id>] --verbose`
+
+### design2prefab.js — 设计文档到 Prefab
+
+从 `design.md` 第4章自动解析节点树 → 生成 `NodeSpec[]` 中间表示 → MCP 或 Offline 创建 Prefab。
+
+**数据源**：
+1. `design.md` 第4章代码块 → 节点树结构（NodeSpec）
+2. `asset-manifest.json` → SpriteFrame UUID 绑定
+
+**三种模式**：
+
+| 模式 | 命令 | 说明 |
+|------|------|------|
+| dry-run | `--dry-run` | 仅解析 + 打印 NodeSpec 树 |
+| MCP | （默认） | 需 Cocos 编辑器运行，实时创建节点 + 保存 Prefab |
+| Offline | `--offline` | 不需编辑器，直接写 .prefab JSON 文件 |
+
+**SpriteFrame 绑定流程**：design.md 节点中 `SpriteFrame: xxx.png` → 从 asset-manifest 查找 `filename === xxx.png && status === 'ready'` → 获取 `spriteFrameUuid` → MCP `setSpriteFrame()` 绑定
+
 ## 可执行脚本
 
-| 脚本 | 用途 | 调用方式 |
-|------|------|----------|
-| [scripts/mcp-client.js](scripts/mcp-client.js) | 通用 MCP 通信层 — 场景/节点/组件/Prefab 操作 API | `require()` 或 `node scripts/mcp-client.js [port]` 测试连通性 |
-| [scripts/resolve-asset-uuids.js](scripts/resolve-asset-uuids.js) | 解析 .meta → UUID，写回 asset-manifest.json | `node scripts/resolve-asset-uuids.js --project <path>` |
-| [scripts/ui-dev-workflow.js](scripts/ui-dev-workflow.js) | V1-V4 验证引擎（通用，不含项目硬编码） | `node scripts/ui-dev-workflow.js --project <path> <ui-name>` |
-| [scripts/sync-runtime.js](scripts/sync-runtime.js) | Runtime 模板同步工具 — 将 templates/runtime/ 同步到项目 scripts/runtime/ | `node scripts/sync-runtime.js --project <path> --apply` |
+### 脚本总览
+
+| 脚本 | 角色层 | 用途 | 调用方式 |
+|------|--------|------|----------|
+| [mcp-client.js](scripts/mcp-client.js) | 🔧 底层库 | MCP 通信层 — 场景/节点/组件/Prefab 操作 API | `require()` 内部调用；或 `node scripts/mcp-client.js [port]` 测试连通性 |
+| [prefab-builder.js](scripts/prefab-builder.js) | 🔧 底层库 | 离线 Prefab JSON 构建器（不需编辑器） | `require()` 内部调用；`node scripts/prefab-builder.js` 自测 |
+| [resolve-asset-uuids.js](scripts/resolve-asset-uuids.js) | ⚙️ 数据同步 | **v2.0** Smart Discovery 资产 UUID 解析 | `node scripts/resolve-asset-uuids.js --project <P> [--page <id>] [--check] [--verbose]` |
+| [design2prefab.js](scripts/design2prefab.js) | ⚙️ 生成 | design.md #4 → NodeSpec → MCP/Offline Prefab | `node scripts/design2prefab.js --project <P> <page> [--dry-run\|--offline]` |
+| [generate-view.js](scripts/generate-view.js) | ⚙️ 生成 | asset-manifest → Layer 2 XxxView.generated.ts | `node scripts/generate-view.js <page> [--dry-run] [--out <dir>]` |
+| [sync-runtime.js](scripts/sync-runtime.js) | 🏗️ 基建 | Runtime 模板同步（templates/ → 项目 scripts/runtime/） | `node scripts/sync-runtime.js --project <P> --apply` |
+| [ui-dev-workflow.js](scripts/ui-dev-workflow.js) | ✅ 验证 | V1-V4 验证引擎（设计文档/Prefab/代码/测试） | `node scripts/ui-dev-workflow.js --project <P> <ui-name>` |
+
+### ⭐ 脚本编排地图（Orchestration Map）
+
+> **Coding Agent 必读**：下面按**场景**列出脚本的组合顺序与依赖关系。**底层库脚本（mcp-client / prefab-builder）不需要手动调用**，它们被 design2prefab 内部 require()。
+
+#### 场景 A：新建 UI 页面（完整 Phase 3 流程）
+
+```
+步骤  脚本                    输入 → 输出                                前置条件
+─────────────────────────────────────────────────────────────────────────────
+ A1   sync-runtime.js         skill templates/ → 项目 runtime/           首次执行或 runtime 版本落后时
+ A2   — (AI 手写) —           Phase 3 输出 design.md + asset-manifest    无（AI 核心工作）
+ A3   — (AI 手写) —           Phase 3 输出 ThemeConfig + PageView.ts     A2 完成
+ A4   resolve-asset-uuids.js  .meta 文件 → asset-manifest UUID 填充     美术资源已放入 assets/
+ A5   generate-view.js        asset-manifest → XxxView.generated.ts     A4（manifest UUID 已填充）
+ A6   design2prefab.js        design.md #4 + manifest → Prefab          A4 + A5
+ A7   ui-dev-workflow.js      全部产出物 → V1-V4 验证报告               A6（所有文件就绪）
+```
+
+**流程图**：
+```
+sync-runtime ─→ AI 写 design.md + manifest + 代码
+                        ↓
+              美术资源放入 assets/
+                        ↓
+              resolve-asset-uuids ─→ generate-view ─→ design2prefab
+                                                           ↓
+                                                   ui-dev-workflow
+```
+
+#### 场景 B：美术资源更新后刷新
+
+```
+步骤  脚本                    说明
+─────────────────────────────────────────────────────────────
+ B1   resolve-asset-uuids.js  重新扫描 → 更新路径 + 填充新 UUID
+ B2   generate-view.js        重新生成 .generated.ts（manifest 变化了）
+ B3   design2prefab.js        可选 — 如需重建 Prefab
+```
+
+#### 场景 C：仅重建 Prefab（设计修改后）
+
+```
+步骤  脚本                    说明
+─────────────────────────────────────────────────────────────
+ C1   design2prefab.js --dry-run   先预览节点树变化
+ C2   design2prefab.js             确认无误后正式构建
+```
+
+#### 场景 D：仅验证产出物完整性
+
+```
+步骤  脚本                    说明
+─────────────────────────────────────────────────────────────
+ D1   ui-dev-workflow.js      运行 V1-V4 验证，查看哪些产出物缺失或不一致
+```
+
+#### 场景 E：新项目初始化
+
+```
+步骤  脚本                    说明
+─────────────────────────────────────────────────────────────
+ E1   sync-runtime.js --apply      同步全部 runtime 模板到项目
+ E2   进入场景 A（A2 开始）
+```
+
+### 脚本依赖关系图
+
+```
+                     ┌─────────────────────┐
+                     │   sync-runtime.js   │ ← 首次/版本更新时执行
+                     │ 🏗️ 基建（独立）      │
+                     └─────────────────────┘
+
+                     ┌─────────────────────┐
+                     │ resolve-asset-uuids │ ← 美术资源变化后执行
+                     │ ⚙️ 数据同步          │
+                     └────────┬────────────┘
+                              │ manifest UUID 已填充
+                    ┌─────────┼─────────┐
+                    ▼                   ▼
+         ┌──────────────────┐  ┌─────────────────┐
+         │ generate-view.js │  │ design2prefab.js │ ← 内部 require:
+         │ ⚙️ Layer 2 代码   │  │ ⚙️ Prefab 生成   │    mcp-client.js (MCP 模式)
+         └──────────────────┘  │                  │    prefab-builder.js (Offline)
+                               └────────┬─────────┘
+                                        │ 所有产出物就绪
+                                        ▼
+                             ┌──────────────────────┐
+                             │ ui-dev-workflow.js    │
+                             │ ✅ V1-V4 验证         │
+                             └──────────────────────┘
+```
+
+### 关键规则
+
+1. **底层库不手动调用** — `mcp-client.js` 和 `prefab-builder.js` 由 `design2prefab.js` 内部 require()，Agent 无需直接运行
+2. **resolve 必须先于 generate/design2prefab** — UUID 未填充就生成代码 = 资源绑定失败
+3. **generate-view 和 design2prefab 可并行** — 两者都只读 manifest，互不依赖（但习惯上先 generate-view 再 design2prefab）
+4. **ui-dev-workflow 放最后** — 它是验证全部产出物的最终关卡
+5. **sync-runtime 按需执行** — 非每次都跑，仅首次或 runtime 模板版本更新时
 
 > **重要**：Agent 在 Cocos Creator 项目中工作时，必须遵守 [cocos-constraints.md](references/cocos-constraints.md) 中的全部约束。核心规则：运行时代码中禁止使用 HTML/CSS/DOM/Web 框架，必须使用 Cocos 原生 API 和组件。

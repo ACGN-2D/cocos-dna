@@ -47,6 +47,23 @@
 | `B` | Bottom 下 |
 | `C` | Center 中 |
 
+### Prefab 文件命名规范
+
+| 层级 | 格式 | 示例 (page-id = `route-map`) |
+|------|------|-----|
+| Prefab 文件 | `<PascalName>Page.prefab` | `RouteMapPage.prefab` |
+| 存储路径 | `assets/resources/prefabs/pages/` | |
+| GameEntry prefabPath | `prefabs/pages/<PascalName>Page` | `prefabs/pages/RouteMapPage` |
+| Layer 2 类名 | `<PascalName>ViewGenerated` | `RouteMapViewGenerated` |
+| Layer 3 类名 | `<PascalName>PageView` | `RouteMapPageView` |
+| Comp 类名 | `<PascalName>PageComp` | `RouteMapPageComp` |
+
+转换规则：`page-id`（kebab） → `toPascalCase()` → 拼接后缀
+
+⚠️ Prefab 文件名必须与 page-id 的 PascalCase 严格对应，不得缩写或别名（如 `MapPage` ≠ `RouteMapPage`）。
+
+> **历史兼容**：已有页面如因历史原因文件名与 page-id 不一致（如 `route-map` → `MapPage.prefab`），可在 `ui-dev-workflow.js` 的 `PREFAB_ALIAS_MAP` 中注册别名映射，但新页面必须严格遵循命名规则。
+
 ---
 
 ## 每个节点必填信息
@@ -63,6 +80,105 @@
 | **Opacity** | 0-255，仅不为 255 时填写 | 按需 |
 | **文本** | Label 文字内容（中文 + 英文） | Label ✅ |
 | **FontSize** | Label 字号 | Label ✅ |
+
+---
+
+## Layout 组件强制声明规范（⚠️ 防重叠关键）
+
+> **背景**：Prefab 中的 Group/Container 节点如果缺少 Layout 组件或子节点位置声明，
+> 所有子节点将堆叠在 `(0, 0, 0)`，导致运行时内容重叠——标题和副标题叠在一起、多个按钮叠在一起。
+> 这是 UI 黑屏之外最常见的视觉 bug。
+
+### 规则 1：任何 `*Group` / `*Container` / `*Row` 容器节点，必须声明子节点排列方式
+
+在第4章节点树中，容器节点**必须**明确标注以下之一：
+
+| 方式 | 节点树标记 | 说明 |
+|------|-----------|------|
+| **Layout 组件** | `[Layout: VERTICAL, spacing=24]` 或 `[Layout: HORIZONTAL, spacing=20]` | Cocos 自动排列，推荐 |
+| **手动位置** | 每个子节点显式写 `Position: (x, y)` | 不用 Layout 时必须逐个标注 |
+
+**禁止**：容器节点有多个子节点但既无 `[Layout]` 标记、子节点也无 `Position` 声明。
+
+### 规则 2：Layout 组件必须指定完整参数
+
+```
+<ContainerName> [Node] [UITransform: WxH] [Layout: <TYPE>, spacing=<N>, resizeMode=<MODE>]
+```
+
+必填参数：
+| 参数 | 值域 | 说明 |
+|------|------|------|
+| `TYPE` | `VERTICAL` / `HORIZONTAL` | 排列方向 |
+| `spacing` | 数字（px） | 子节点间距。**不可省略**，省略时 Cocos 默认 0 导致紧贴 |
+| `resizeMode` | `NONE` / `CONTAINER` / `CHILDREN` | 容器是否根据子节点自动调整尺寸 |
+
+可选参数：
+| 参数 | 说明 |
+|------|------|
+| `paddingTop/Bottom/Left/Right` | 内边距 |
+| `verticalDirection` | `TOP_TO_BOTTOM`（默认）/ `BOTTOM_TO_TOP` |
+| `horizontalDirection` | `LEFT_TO_RIGHT`（默认）/ `RIGHT_TO_LEFT` |
+
+### 规则 3：design.md 第4章写法示例
+
+✅ **正确写法**（有 Layout）：
+```
+ButtonGroup [Node] [UITransform: 400x180] [Layout: VERTICAL, spacing=24, resizeMode=CONTAINER]
+│   Position: (0, -80)
+│
+├── NewGameBtn [Node+Sprite] [UITransform: 320x72]
+│   Position: 由 Layout 自动排列
+│
+└── ContinueBtn [Node+Sprite] [UITransform: 280x56]
+    Position: 由 Layout 自动排列
+```
+
+✅ **正确写法**（手动位置，无 Layout）：
+```
+ButtonGroup [Node] [UITransform: 400x180]
+│   Position: (0, -80)
+│
+├── NewGameBtn [Node+Sprite] [UITransform: 320x72]
+│   Position: (0, 40)    ← 明确标注
+│
+└── ContinueBtn [Node+Sprite] [UITransform: 280x56]
+    Position: (0, -48)   ← 明确标注
+```
+
+❌ **错误写法**（缺少排列信息 → 子节点全堆叠在 (0,0)）：
+```
+ButtonGroup [Node] [UITransform: 400x180]
+│   Position: (0, -80)
+│
+├── NewGameBtn [Node+Sprite] [UITransform: 320x72]    ← 无 Position、无 Layout → 重叠！
+└── ContinueBtn [Node+Sprite] [UITransform: 280x56]   ← 无 Position、无 Layout → 重叠！
+```
+
+### 规则 4：验证清单（design.md 输出后必检）
+
+在附录 D 的设计验证清单中，追加以下检查项：
+
+- [ ] **每个 Group/Container/Row 节点有 Layout 组件声明或子节点手动 Position**
+- [ ] **Layout spacing ≠ 0**（除非设计意图就是紧贴）
+- [ ] **多子节点容器的所有子节点 Position 不全为 (0,0)**
+
+### 规则 5：运行时 fallback — PageView 中的位置保障
+
+即使 design.md 正确声明了 Layout，**Prefab 生成工具可能遗漏 Layout 组件**（已知问题：MCP 创建节点时不自动添加 Layout 组件）。
+因此，Layer 3 PageView 的 `_setupPrefabUI()` 中**必须包含子节点位置设置**作为 fallback：
+
+```typescript
+// ✅ 必须在 _setupPrefabUI() 中为 Group 子节点设置位置
+// 即使 Prefab 有 Layout 组件，显式 setPosition 也不会冲突（Layout 会覆盖）
+// 但如果 Prefab 缺少 Layout，这些位置就是唯一的布局保障
+const newGameBtn = this.getNode('NewGameBtn');
+if (newGameBtn) newGameBtn.setPosition(0, 40, 0);
+const continueBtn = this.getNode('ContinueBtn');
+if (continueBtn) continueBtn.setPosition(0, -48, 0);
+```
+
+> **原则**：**双保险** — design.md 声明 Layout + PageView 代码设置 Position。两者任一存在即可防止重叠。
 
 ---
 

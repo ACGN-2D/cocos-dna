@@ -47,6 +47,7 @@
 `assets/resources/prefabs/pages/<PascalName>Page.prefab`
 
 ### 验证规则
+0. **Prefab 文件命名**：文件名必须为 `<PascalName>Page.prefab`，与 page-id 的 PascalCase 严格对应（历史页面可通过别名映射兼容）
 1. **节点存在性**：design.md 第4章声明的每个节点名都必须出现在 .prefab JSON 中的 `"_name"` 字段
 2. **UITransform**：根节点必须有 `cc.UITransform` 组件
 3. **PageComp 挂载**：根节点必须挂载对应的 `<Page>PageComp` 组件
