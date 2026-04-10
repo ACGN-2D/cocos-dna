@@ -247,6 +247,13 @@ async function createPrefab(nodePath, dbURL, overwrite) {
     return result;
 }
 
+/**
+ * 创建新 Scene。
+ * ⚠️ 使用约束（见 cocos-constraints.md「Scene 架构约束」）：
+ *   - 项目默认采用「单场景 + 多 Prefab」架构，禁止自动调用此 API
+ *   - 仅当渲染环境根本不同（不同光照/管线/天空盒）且用户明确确认时才可调用
+ *   - 调用后必须同步更新 build-config.json 的 scenes 列表和 startScene
+ */
 async function createScene(baseName, dbURL) {
     return callTool('scene-create', { options: { baseName, templateType: '2d', dbURL } });
 }

@@ -72,6 +72,9 @@ export class LayerManager {
      */
     private _createLayer(parent: Node, name: string): Node {
         const node = new Node(name);
+        // ★ 关键：设置 layer = UI_2D，否则 Camera 看不到此节点
+        // new Node() 默认 layer=0 (DEFAULT)，不在 2D Camera 的 visibility mask 中
+        node.layer = Layers.Enum.UI_2D;  // 1 << 25 = 33554432
         parent.addChild(node);
 
         // UITransform — 继承父节点尺寸

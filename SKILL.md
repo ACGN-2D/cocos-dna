@@ -174,6 +174,17 @@ cocos-dna/components/<page>/
 | 6 | Prefab 文件 | `assets/resources/prefabs/pages/<Page>Page.prefab` | MCP 自动创建 |
 | 7 | ThemeConfig 更新 | `assets/scripts/ui/themed-components/ThemeConfig.ts` | 全局 tokens 同步（SteamColors SSOT） |
 
+### Scene vs Prefab 架构决策
+
+> ⚠️ **关键规则**：新 UI 页面**默认创建为 `.prefab`**，不新建 `.scene`。详细约束见 → [cocos-constraints.md](references/cocos-constraints.md)「Scene 架构约束」章节。
+
+| 决策 | 条件 | 产物 |
+|------|------|------|
+| **创建 Prefab**（默认） | 所有普通 UI 页面（菜单/战斗/地图/设置等） | `assets/resources/prefabs/pages/<Page>Page.prefab` |
+| **创建 Scene**（例外） | 渲染管线/光照/天空盒与主场景根本不同（需设计文档论证 + 用户确认） | `assets/scenes/<name>.scene` + 更新 build-config.json |
+
+`design2prefab.js` 的 MCP 模式使用 scene 仅作为**临时工作区**（打开 → 创建节点 → 导出为 Prefab → 清理），scene 本身不是产出物。Offline 模式不涉及 scene。
+
 ### 三层架构
 
 所有页面统一使用 BaseView 三层架构：
@@ -351,7 +362,11 @@ Phase 3 设计       美术资源生成         资产同步              Prefab
 | MCP | （默认） | 需 Cocos 编辑器运行，实时创建节点 + 保存 Prefab |
 | Offline | `--offline` | 不需编辑器，直接写 .prefab JSON 文件 |
 
-**SpriteFrame 绑定流程**：design.md 节点中 `SpriteFrame: xxx.png` → 从 asset-manifest 查找 `filename === xxx.png && status === 'ready'` → 获取 `spriteFrameUuid` → MCP `setSpriteFrame()` 绑定
+**SpriteFrame 绑定流程（双策略）**：
+1. **显式绑定** — design.md 节点中 `SpriteFrame: xxx.png` → 从 asset-manifest 查找 `filename === xxx.png && (status === 'ready' || status === 'size_mismatch')` → 获取 `spriteFrameUuid` → MCP `setSpriteFrame()` / Offline `__uuid__` 绑定
+2. **自动绑定（推荐）** — 节点为 `[Sprite]` 类型但无显式 `SpriteFrame:` 属性时 → 从 asset-manifest 的 `boundToNodes` 数组匹配当前节点路径 → 获取 `spriteFrameUuid` → 自动绑定
+
+> **注意**：`size_mismatch` 状态的资源也有有效 UUID，不会跳过绑定。MCP 和 Offline 模式均支持上述双策略。
 
 ## 可执行脚本
 

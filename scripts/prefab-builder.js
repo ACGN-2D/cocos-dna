@@ -101,7 +101,12 @@ class PrefabBuilder {
         });
     }
 
-    addSprite(nodeIdx, r, g, b, a, sizeMode) {
+    addSprite(nodeIdx, r, g, b, a, sizeMode, spriteFrameUuid) {
+        // spriteFrameUuid: 可选，格式如 "uuid@f9941"，传入后生成 __uuid__ 引用
+        const sfRef = spriteFrameUuid ? {
+            __uuid__: spriteFrameUuid,
+            __expectedType__: 'cc.SpriteFrame',
+        } : null;
         return this._add({
             __type__: 'cc.Sprite',
             _name: '',
@@ -114,7 +119,7 @@ class PrefabBuilder {
             _srcBlendFactor: 2,
             _dstBlendFactor: 4,
             _color: color(r, g, b, a),
-            _spriteFrame: null,
+            _spriteFrame: sfRef,
             _type: 0,
             _fillType: 0,
             _sizeMode: sizeMode !== undefined ? sizeMode : 0,

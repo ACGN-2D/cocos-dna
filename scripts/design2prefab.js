@@ -723,13 +723,37 @@ async function buildViaMCP(nodeTree, opts) {
         }
 
         // SpriteFrame UUID 绑定 (从 asset-manifest 查找)
-        if (spec.spriteFrame && assetManifest) {
-            const entry = assetManifest.find(a =>
-                a.filename === spec.spriteFrame && a.status === 'ready' && a.spriteFrameUuid
-            );
+        if (assetManifest && spec.types.includes('Sprite')) {
+            let entry = null;
+
+            // 策略1: design.md 节点有显式 SpriteFrame: filename.png
+            if (spec.spriteFrame) {
+                entry = assetManifest.find(a =>
+                    a.filename === spec.spriteFrame &&
+                    (a.status === 'ready' || a.status === 'size_mismatch') &&
+                    a.spriteFrameUuid
+                );
+            }
+
+            // 策略2: 通过 boundToNodes 自动匹配（无需 design.md 写 SpriteFrame:）
+            if (!entry) {
+                // 构建当前节点在 Prefab 中的相对路径
+                // nodePath 格式: "Canvas/PageRoot/SubNode" → 取 parentPath 之后的部分
+                const relativePath = nodePath.startsWith(parentPath + '/')
+                    ? nodePath.substring(parentPath.length + 1)
+                    : spec.name;
+
+                entry = assetManifest.find(a =>
+                    a.boundToNodes &&
+                    a.boundToNodes.some(bn => bn === relativePath || bn.endsWith('/' + spec.name) || bn === spec.name) &&
+                    (a.status === 'ready' || a.status === 'size_mismatch') &&
+                    a.spriteFrameUuid
+                );
+            }
+
             if (entry) {
                 await mcp.setSpriteFrame(nodePath, entry.spriteFrameUuid);
-                console.log(`    → SpriteFrame bound: ${spec.spriteFrame}`);
+                console.log(`    → SpriteFrame bound: ${entry.filename} (${entry.id})`);
             }
         }
 
@@ -756,9 +780,13 @@ async function buildViaMCP(nodeTree, opts) {
 /**
  * 遍历 NodeSpec 树，使用 PrefabBuilder 生成 .prefab JSON。
  * @param {NodeSpec} nodeTree  — 解析后的节点树
+ * @param {Object}   [opts]   — 选项
+ * @param {Array}    [opts.assetManifest] — asset-manifest.json 的 assets 数组
  * @returns {Array}            — Prefab JSON 对象数组
  */
-function buildOffline(nodeTree) {
+function buildOffline(nodeTree, opts) {
+    opts = opts || {};
+    const assetManifest = opts.assetManifest || null;
     let PrefabBuilder, ref, vec3, color;
     try {
         const pb = require('./prefab-builder');
@@ -837,7 +865,38 @@ function buildOffline(nodeTree) {
         if (spec.types.includes('Sprite')) {
             const c = spec.color || { r: 255, g: 255, b: 255, a: 255 };
             const a = spec.opacity !== undefined ? spec.opacity : c.a;
-            b.addSprite(info.nodeIdx, c.r, c.g, c.b, a);
+
+            // 查找 SpriteFrame UUID
+            let sfUuid = null;
+            if (assetManifest) {
+                let entry = null;
+
+                // 策略1: 显式 SpriteFrame: filename.png
+                if (spec.spriteFrame) {
+                    entry = assetManifest.find(m =>
+                        m.filename === spec.spriteFrame &&
+                        (m.status === 'ready' || m.status === 'size_mismatch') &&
+                        m.spriteFrameUuid
+                    );
+                }
+
+                // 策略2: boundToNodes 自动匹配
+                if (!entry) {
+                    const nodePath = _buildNodePath(spec, nodeTree);
+                    entry = assetManifest.find(m =>
+                        m.boundToNodes &&
+                        m.boundToNodes.some(bn => bn === nodePath || bn.endsWith('/' + spec.name) || bn === spec.name) &&
+                        (m.status === 'ready' || m.status === 'size_mismatch') &&
+                        m.spriteFrameUuid
+                    );
+                }
+
+                if (entry) {
+                    sfUuid = entry.spriteFrameUuid;
+                }
+            }
+
+            b.addSprite(info.nodeIdx, c.r, c.g, c.b, a, undefined, sfUuid);
         }
 
         // Label
@@ -965,6 +1024,26 @@ async function buildFromDesign(pageId, opts) {
 // ====================================================================
 //  6. 映射工具函数
 // ====================================================================
+
+/**
+ * 从 NodeSpec 树构建节点的相对路径（如 "PageRoot/Content/BG"），
+ * 用于匹配 asset-manifest 中的 boundToNodes。
+ * @param {NodeSpec} targetSpec — 目标节点
+ * @param {NodeSpec} rootSpec   — 根节点（树顶层）
+ * @returns {string} — 节点路径（如 "PageRoot/Content/BG"）
+ */
+function _buildNodePath(targetSpec, rootSpec) {
+    // DFS 查找路径
+    function findPath(current, target, path) {
+        if (current === target) return path;
+        for (const child of current.children || []) {
+            const result = findPath(child, target, path + '/' + child.name);
+            if (result) return result;
+        }
+        return null;
+    }
+    return findPath(rootSpec, targetSpec, rootSpec.name) || targetSpec.name;
+}
 
 function _mapToMCPNodeType(spec) {
     if (spec.types.includes('Sprite')) return 'SpriteSplash';
@@ -1168,9 +1247,26 @@ if (require.main === module) {
         const allTrees = parseAllNodeTrees(content);
         console.log(`[offline] Found ${allTrees.length} Prefab tree(s) in design.md`);
 
+        // 加载 asset-manifest (如有)
+        let assetManifest = null;
+        const manifestPath = path.join(projectRoot, 'cocos-dna', 'components', pageId, 'asset-manifest.json');
+        if (fs.existsSync(manifestPath)) {
+            try {
+                const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+                assetManifest = manifest.assets || [];
+                console.log(`[offline] Asset manifest loaded: ${assetManifest.length} assets`);
+            } catch (e) {
+                console.warn(`[offline] Failed to parse asset-manifest.json: ${e.message}`);
+            }
+        } else {
+            console.log('[offline] No asset-manifest.json found — Sprites will have no SpriteFrame');
+        }
+
+        const offlineOpts = assetManifest ? { assetManifest } : {};
+
         for (let i = 0; i < allTrees.length; i++) {
             const tree = allTrees[i];
-            const json = buildOffline(tree);
+            const json = buildOffline(tree, offlineOpts);
             const rootName = tree.name; // e.g. "MapPage", "MapNode"
 
             // 推断输出路径:
@@ -1188,7 +1284,7 @@ if (require.main === module) {
             const pascalName = _toPascalCase(pageId);
             const legacyPath = path.join(projectRoot, 'assets', 'resources', 'prefabs', 'pages', `${pascalName}Page.prefab`);
             if (!fs.existsSync(legacyPath)) {
-                const json = buildOffline(allTrees[0]);
+                const json = buildOffline(allTrees[0], offlineOpts);
                 fs.writeFileSync(legacyPath, JSON.stringify(json, null, 2));
                 console.log(`[offline] Legacy compat: ${legacyPath}`);
             }
