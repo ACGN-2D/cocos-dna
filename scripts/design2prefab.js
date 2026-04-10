@@ -340,6 +340,17 @@ function _matchNodeLine(line) {
             continue;
         }
 
+        // Layout: HORIZONTAL/VERTICAL with optional spacing
+        // e.g. [Layout: VERTICAL, spacing=16] or [Layout: HORIZONTAL, spacing=40]
+        const layoutBracketMatch = tag.match(/^Layout:\s*(HORIZONTAL|VERTICAL)(?:\s*,?\s*spacing\s*=?\s*(\d+))?/i);
+        if (layoutBracketMatch) {
+            spec._layout = layoutBracketMatch[1].toUpperCase();
+            if (layoutBracketMatch[2]) {
+                spec._layoutSpacing = parseInt(layoutBracketMatch[2]);
+            }
+            continue;
+        }
+
         // Type names: Sprite, Label, Node, etc.
         if (/^(Sprite|Label|Node|Layout|ScrollView|Mask|Graphics)$/i.test(tag)) {
             spec.types.push(tag);
@@ -376,6 +387,14 @@ function _matchNodeLine(line) {
         spec.position = { x: parseFloat(posMatch[1]), y: parseFloat(posMatch[2]) };
     }
 
+    // 内联 Position: (x, y) 格式 (design.md 常见写法)
+    if (!spec.position) {
+        const inlinePosMatch = content.match(/Position:\s*\((-?[\d.]+)\s*,\s*(-?[\d.]+)\)/i);
+        if (inlinePosMatch) {
+            spec.position = { x: parseFloat(inlinePosMatch[1]), y: parseFloat(inlinePosMatch[2]) };
+        }
+    }
+
     // 内联 bg:rgba(...) 或 bg:#...
     const bgRgbaMatch = content.match(/bg:\s*rgba\((\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)\)/);
     if (bgRgbaMatch) {
@@ -405,12 +424,61 @@ function _matchNodeLine(line) {
         spec._borderRadius = parseInt(radiusMatch[1]);
     }
 
-    // 内联 text:#... 或 Label 文字
+    // 内联 text:#... 或 Label 文字 (紧凑格式: "48px w700 #FFFFFF")
     const inlineLabelMatch = content.match(/(\d+)px\s+(?:w(\d+)\s+)?(#[0-9A-Fa-f]{6})/);
     if (inlineLabelMatch) {
         spec.fontSize = parseInt(inlineLabelMatch[1]);
         if (inlineLabelMatch[2]) spec.fontWeight = parseInt(inlineLabelMatch[2]);
         spec.color = _hexToColor(inlineLabelMatch[3]);
+    }
+
+    // 内联 FontSize: N (design.md 常见写法)
+    if (!spec.fontSize) {
+        const inlineFsMatch = content.match(/FontSize:\s*(\d+)/i);
+        if (inlineFsMatch) {
+            spec.fontSize = parseInt(inlineFsMatch[1]);
+        }
+    }
+
+    // 内联 Color: #RRGGBB (节点行末尾)
+    if (!spec.color) {
+        const inlineColorHex = content.match(/Color:\s*(#[0-9A-Fa-f]{6})/i);
+        if (inlineColorHex) {
+            spec.color = _hexToColor(inlineColorHex[1]);
+        }
+    }
+    // 内联 Color: rgba(r,g,b,a)
+    if (!spec.color) {
+        const inlineColorRgba = content.match(/Color:\s*rgba\((\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)\)/i);
+        if (inlineColorRgba) {
+            const a = parseFloat(inlineColorRgba[4]);
+            spec.color = {
+                r: parseInt(inlineColorRgba[1]),
+                g: parseInt(inlineColorRgba[2]),
+                b: parseInt(inlineColorRgba[3]),
+                a: a <= 1 ? Math.round(a * 255) : Math.round(a),
+            };
+        }
+    }
+
+    // 内联 Opacity: N
+    if (spec.opacity === undefined) {
+        const inlineOpMatch = content.match(/Opacity:\s*(\d+)/i);
+        if (inlineOpMatch) {
+            spec.opacity = parseInt(inlineOpMatch[1]);
+        }
+    }
+
+    // 内联 Weight: Bold / Weight: N
+    const weightMatch = content.match(/Weight:\s*(\w+)/i);
+    if (weightMatch) {
+        const wv = weightMatch[1];
+        if (/bold/i.test(wv)) {
+            spec.bold = true;
+        } else if (/^\d+$/.test(wv)) {
+            spec.fontWeight = parseInt(wv);
+            if (spec.fontWeight >= 600) spec.bold = true;
+        }
     }
 
     // 内联 bold
@@ -436,8 +504,8 @@ function _matchNodeLine(line) {
 // ── 内部: 解析属性行 ──
 
 function _parsePropertyLine(line, spec) {
-    // 清理树前缀 (│   )
-    const clean = line.replace(/^[│\s]+/, '').trim();
+    // 清理树前缀 (│   ├── └── ─ 等所有树形绘制字符)
+    const clean = line.replace(/^[│├└─\s]+/, '').trim();
     if (!clean) return;
 
     // Position: (x, y)
@@ -488,6 +556,34 @@ function _parsePropertyLine(line, spec) {
         const val = strPlain[1].trim();
         if (val && !val.startsWith('(')) {
             spec.text = val;
+        }
+        return;
+    }
+
+    // 文本: "xxx" / "yyy" FontSize: N Color: #xxx Weight: Bold (中文属性行)
+    // 支持多种格式:
+    //   └── 文本: "PIG RABBIT" / "PIG RABBIT" FontSize: 72 Color: #FFD700 Weight: Bold
+    //   └── 文本: "简单" / "EASY"
+    //   └── 文本: "开始战斗 GO!" / "FIGHT GO!"
+    const textMatch = clean.match(/^文本:\s*"([^"]*)"\s*(?:\/\s*"([^"]*)")?/);
+    if (textMatch) {
+        if (textMatch[2]) {
+            spec.text = { cn: textMatch[1], en: textMatch[2] };
+        } else {
+            spec.text = textMatch[1];
+        }
+        // 同行可能还有 FontSize / Color / Weight 属性
+        const fsMt = clean.match(/FontSize:\s*(\d+)/i);
+        if (fsMt) spec.fontSize = parseInt(fsMt[1]);
+        const colorMt = clean.match(/Color:\s*(#[0-9A-Fa-f]{6})/i);
+        if (colorMt) spec.color = _hexToColor(colorMt[1]);
+        const weightMt = clean.match(/Weight:\s*(\w+)/i);
+        if (weightMt) {
+            if (/bold/i.test(weightMt[1])) spec.bold = true;
+            else if (/^\d+$/.test(weightMt[1])) {
+                spec.fontWeight = parseInt(weightMt[1]);
+                if (spec.fontWeight >= 600) spec.bold = true;
+            }
         }
         return;
     }
@@ -609,6 +705,11 @@ function _parseWidgetSpec(str) {
     if (topMatch) w.top = parseInt(topMatch[1]);
     const bottomMatch = str.match(/(?:^|[\s,])Bottom\s*=?\s*(\d+)/i) || str.match(/(?:^|[\s,])B\s*=\s*(\d+)/i);
     if (bottomMatch) w.bottom = parseInt(bottomMatch[1]);
+    // 居中对齐: HCenter=<offset>, VCenter=<offset>
+    const hCenterMatch = str.match(/HCenter\s*=?\s*(-?\d+)/i);
+    if (hCenterMatch) w.hCenter = parseInt(hCenterMatch[1]);
+    const vCenterMatch = str.match(/VCenter\s*=?\s*(-?\d+)/i);
+    if (vCenterMatch) w.vCenter = parseInt(vCenterMatch[1]);
     return Object.keys(w).length > 0 ? w : null;
 }
 
@@ -922,7 +1023,9 @@ function buildOffline(nodeTree, opts) {
                 spec.widget.top,
                 spec.widget.bottom,
                 spec.widget.left,
-                spec.widget.right
+                spec.widget.right,
+                spec.widget.hCenter,
+                spec.widget.vCenter
             );
         }
 
@@ -1058,6 +1161,8 @@ function _mapWidgetProps(widget) {
     if (widget.right !== undefined) { props.isAlignRight = true; props.right = widget.right; }
     if (widget.top !== undefined) { props.isAlignTop = true; props.top = widget.top; }
     if (widget.bottom !== undefined) { props.isAlignBottom = true; props.bottom = widget.bottom; }
+    if (widget.hCenter !== undefined) { props.isAlignHorizontalCenter = true; props.horizontalCenter = widget.hCenter; }
+    if (widget.vCenter !== undefined) { props.isAlignVerticalCenter = true; props.verticalCenter = widget.vCenter; }
     return props;
 }
 
@@ -1100,6 +1205,8 @@ function _computeWidgetFlags(widget) {
     if (widget.bottom !== undefined) flags |= 2;    // BOTTOM
     if (widget.left !== undefined) flags |= 4;      // LEFT
     if (widget.right !== undefined) flags |= 8;     // RIGHT
+    if (widget.hCenter !== undefined) flags |= 16;  // HORIZONTAL_CENTER
+    if (widget.vCenter !== undefined) flags |= 32;  // VERTICAL_CENTER
     return flags;
 }
 

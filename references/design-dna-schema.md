@@ -54,10 +54,25 @@
 ### layout
 | 字段 | 说明 |
 |------|------|
+| `design_resolution` | 设计分辨率对象 `{ width, height }`。所有坐标以此为基准。例 `{ "width": 1280, "height": 720 }` |
+| `fit_strategy` | 适配模式 `"fitHeight"` / `"fitWidth"` / `"showAll"` / `"noBorder"`，参考 Cocos Canvas 设置 |
+| `target_platform` | 目标平台 `"mobile-landscape"` / `"mobile-portrait"` / `"tablet"` / `"pc"` / `"cross-platform"` |
+| `safe_area` | 安全区域（**不被裁切**的内容区域），对象 `{ width, height }`。fitHeight 模式下两侧可能被裁切，safe_area.width < design_resolution.width |
 | `grid_system` | 网格系统 |
 | `max_content_width` | 最大内容宽度 |
 | `columns` / `gutter` | 列数 / 间距 |
 | `alignment_tendency` | "strict grid" / "centered" / "asymmetric" |
+
+> **适配策略说明**（参考 [Cocos 多分辨率适配方案](https://docs.cocos.com/creator/3.8/manual/zh/ui-system/components/engine/multi-resolution.html)）：
+>
+> | 策略 | Canvas 设置 | 行为 | 适合场景 |
+> |------|------------|------|---------|
+> | `fitHeight` | 适配高度 | 高度撑满，宽度可能被裁切 | 横屏游戏（16:9 设计在 20:9 上两侧扩展） |
+> | `fitWidth` | 适配宽度 | 宽度撑满，高度可能被裁切 | 竖屏游戏 |
+> | `showAll` | 同时适配宽高 | 完整显示，可能有黑边 | 内容不可裁切的场景 |
+> | `noBorder` | 不开启任何适配 | 自动选择 fitHeight/fitWidth，无黑边 | 通用 |
+>
+> **safe_area 的作用**：在 fitHeight 模式下，设计分辨率 1280×720（16:9）运行在 20:9 屏幕上时，宽度会扩展到约 1422px，但**窄屏设备上宽度可能只有 1138px**。`safe_area.width` 定义了确保可见的最小宽度，关键 UI 元素必须放在安全区域内。超出安全区域的内容（如背景图延伸、装饰元素）在窄屏上允许被裁切。
 
 ### shape
 | 字段 | 说明 |

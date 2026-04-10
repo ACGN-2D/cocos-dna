@@ -72,14 +72,16 @@ Phase 1: 结构          Phase 2: 分析          Phase 3: 生成（Cocos 转换
 ### 执行步骤
 
 1. **读取设计约束** — 读取 `cocos-dna/design-dna.json`（SSOT）+ 已有 components/ 文档作为风格基线
-2. **确认输入** — 页面名称（英文+中文）、设计分辨率、UI 参考图
+2. **确认输入** — 页面名称（英文+中文）、设计分辨率、适配策略、UI 参考图
+   - **⚠️ 适配策略确认（不可跳过）**：从 `design-dna.json` → `design_system.layout` 读取 `design_resolution` + `fit_strategy` + `safe_area`。如缺失，**必须先询问用户**目标平台和适配策略后补充到 design-dna.json
 3. **⚠️ 初始化页面目录结构（不可跳过）** — 见下方「页面目录初始化」
 4. **分析图片 → 匹配 DNA** — 将图片元素匹配到 DNA 的颜色、字体、间距等
-5. **⚠️ 询问动态效果（不可跳过）** — 见下方「动态效果确认」
-6. **DNA → Cocos 组件映射** — 按映射表确定层级结构和组件分配
-7. **输出文档 + 代码** — 见下方「产出物清单」
-8. **MCP 创建 Prefab** — 按 MCP 调用序列自动创建节点树
-9. **验证** — 按验证清单自检，见 → [references/output-spec.md](references/output-spec.md)
+5. **⚠️ 参考图坐标换算（不可跳过）** — 见下方「参考图坐标换算规则」
+6. **⚠️ 询问动态效果（不可跳过）** — 见下方「动态效果确认」
+7. **DNA → Cocos 组件映射** — 按映射表确定层级结构和组件分配。**必须按三层分类规则决定定位方式**（Layer 1 交互UI→Widget / Layer 2 容器→Widget+Layout / Layer 3 装饰→Position）
+8. **输出文档 + 代码** — 见下方「产出物清单」
+9. **MCP 创建 Prefab** — 按 MCP 调用序列自动创建节点树
+10. **验证** — 按验证清单自检，见 → [references/output-spec.md](references/output-spec.md)
 
 ### ⚠️ 页面目录初始化（必须在输出任何文件前执行）
 
@@ -108,6 +110,78 @@ cocos-dna/components/<page>/
 - [ ] `design-dna.json` 的 `pages` 索引中已添加新页面条目
 
 > 💡 **提示**：可参考 `examples/_example-page/` 的目录结构。`assets/art-prompts.md` 在步骤 7 输出文档时与 design.md、asset-manifest.json 一起编写。
+
+### ⚠️ 参考图坐标换算规则（必须在输出 design.md 前执行）
+
+> **背景**：用户提供的 UI 参考图分辨率（如 2712×1220）通常与项目设计分辨率（如 1280×720）不同。
+> 如果直接使用参考图上的像素坐标写入 design.md 第4章，会导致节点偏移出屏、UI 布局崩溃。
+> **这是 pig-rabbit 等项目 UI 全乱的根本原因。**
+
+**换算公式**：
+
+```
+scaleX = design_resolution.width / 参考图宽度
+scaleY = design_resolution.height / 参考图高度
+
+新坐标 x = 参考图 x × scaleX
+新坐标 y = 参考图 y × scaleY
+新尺寸 w = 参考图 w × scaleX  (或 scaleY，取决于保持比例的需求)
+新尺寸 h = 参考图 h × scaleY
+```
+
+**换算后按「三层分类」决定定位方式**（见 [node-spec.md](references/node-spec.md) 的「UI 布局三层分类规则」）：
+
+> **核心原则（来自 Cocos 官方多分辨率适配文档）**：
+> Canvas 负责整体缩放（所有渲染元素统一缩放），Widget 负责 UI 对齐（确保元素在不同分辨率保持正确位置）。
+> **Widget 只用于「需要在不同分辨率保持语义位置」的 UI 元素**，不是所有节点都用 Widget。
+
+| 层级 | 元素类型 | 定位方式 | 说明 |
+|------|---------|---------|------|
+| **Layer 1: 交互 UI** | 按钮、标题、文本、HUD、输入框、提示 | **必须 Widget**（禁止用 Position 定位到屏幕边缘） | 不同分辨率/宽高比必须保持语义位置 |
+| **Layer 2: 结构容器** | Panel、Group、Container、List | **Widget + Layout** | 容器决定内部元素位置，自身用 Widget 锚定 |
+| **Layer 3: 装饰/视觉元素** | 背景纹理、齿轮装饰、光效、粒子 | **可以用 Position**（Canvas 已统一缩放），不强制 Widget | 装饰不需精确对齐；有动画的装饰用 Position 更灵活 |
+
+**Widget 具体策略表**（仅 Layer 1 + Layer 2）：
+
+| 换算后的节点位置 | Widget 策略 | 说明 |
+|----------------|------------|------|
+| 顶部 UI（标题、返回按钮） | `[Widget: Top=边距, HCenter=0]` | 不同设备顶部高度不同（刘海/平板） |
+| 底部 UI（按钮、提示文字） | `[Widget: Bottom=边距, HCenter=0]` | 底部 UI 最典型需要适配的区域 |
+| 全屏背景/遮罩 | `[Widget: LRTB=0]` | 自动撑满，不用固定尺寸 |
+| 水平居中内容组 | `[Widget: HCenter=0]` + Position y | 居中不依赖绝对 x |
+| 底部多个按钮/提示 | 用 Layout 包一层 + `[Widget: Bottom=N, HCenter=0]` | 避免按钮与提示文字重叠 |
+
+**装饰元素（Layer 3）策略**：
+
+| 装饰类型 | 推荐定位 | 说明 |
+|---------|---------|------|
+| 纯视觉装饰（齿轮、飘带、纹理） | `Position`（Canvas 缩放即可） | 不同宽高比下允许被裁切 |
+| 需要在宽窄屏都可见的角落装饰 | `[Widget: 方向=边距, AlignMode=ONCE]` | ONCE = 仅初始化对齐一次，之后不干涉动画 |
+| 有持续动画的装饰（旋转齿轮等） | `Position` 或 `[Widget: AlignMode=ONCE]` | **⚠️ AlignMode=ALWAYS 会每帧重置 Position，覆盖 tween 动画** |
+
+**换算示例**（参考图 2712×1220 → 设计分辨率 1280×720）：
+
+```
+scaleX = 1280/2712 ≈ 0.472
+scaleY = 720/1220  ≈ 0.590
+
+TitleGroup(交互UI):  y=440  → y≈260 → Widget: Top=100, HCenter=0
+CardGroup(结构容器):  y=80   → y≈47  → Widget: HCenter=0, VCenter=25
+DifficultyGroup(UI): y=-380 → y≈-224 → Widget: Bottom=136, HCenter=0
+StartBtn(交互UI):    y=-500 → y≈-295 → Widget: Bottom=65, HCenter=0
+DecoGear(装饰):      (-560, 300) → (-264, 177) → Position: (-264, 177)（Canvas 缩放即可）
+Card 500×600 → 236×354（按 scaleX 等比缩放）
+```
+
+**Agent 检查清单**（步骤 5）：
+- [ ] 已识别参考图分辨率与设计分辨率的差异
+- [ ] 已计算 scaleX 和 scaleY
+- [ ] 所有坐标和尺寸已按比例换算到设计分辨率
+- [ ] **交互 UI（Layer 1）** 使用 Widget 定位，禁止 Position 定位到屏幕边缘
+- [ ] **结构容器（Layer 2）** 使用 Widget + Layout
+- [ ] **装饰元素（Layer 3）** 使用 Position（有动画的节点不用 Widget ALWAYS）
+- [ ] 关键 UI 元素在安全区域内
+- [ ] 有持续动画的 Widget 节点设置 `AlignMode=ONCE`
 
 ### ⚠️ MCP 降级策略
 
@@ -143,7 +217,9 @@ cocos-dna/components/<page>/
 
 | 选填项 | 默认值 |
 |--------|--------|
-| 设计分辨率 | 从项目 cocos-dna/design-dna.json 读取，或默认 1920×1080 |
+| 设计分辨率 | 从项目 `cocos-dna/design-dna.json` → `layout.design_resolution` 读取，或默认 1280×720 |
+| 适配策略 | 从项目 `cocos-dna/design-dna.json` → `layout.fit_strategy` 读取，或默认 `"fitHeight"`（横屏）/ `"fitWidth"`（竖屏） |
+| 安全区域 | 从项目 `cocos-dna/design-dna.json` → `layout.safe_area` 读取。如未定义，默认等于设计分辨率 |
 | 额外交互说明 | 从图片推断 |
 
 ### ⚡ 动态效果确认（重要）
@@ -199,7 +275,7 @@ cocos-dna/components/<page>/
 
 | 章节 | 内容 | 何时读取详细规范 |
 |------|------|-----------------|
-| 第1章 设计概述 | 页面功能、视觉目标、设计分辨率、设计原则 | — |
+| 第1章 设计概述 | 页面功能、视觉目标、设计分辨率、**适配策略（fit_strategy + safe_area）**、设计原则 | — |
 | 第1.5章 参考图溯源 | 参考图列表、设计决策追踪表 | — |
 | 第2章 整体布局 | ASCII 线框图 + 布局要点表 | — |
 | 第3章 视觉规范 | 色彩/字体/尺寸/动效 4 个子表 | — |

@@ -18,10 +18,12 @@
  * 用法:
  *   node resolve-asset-uuids.js --project <project-root>                    # 处理所有页面
  *   node resolve-asset-uuids.js --project <project-root> --page main-menu   # 只处理主菜单
+ *   node resolve-asset-uuids.js --project <project-root> main-menu          # 同上 (位置参数)
  *   node resolve-asset-uuids.js --project <project-root> --check            # 仅检查，不写入
  *   node resolve-asset-uuids.js --project <project-root> --verbose          # 详细输出
  *   node resolve-asset-uuids.js --project <project-root> --no-discover      # 禁用 Smart Discovery
  * 
+ * 页面名可以通过 --page <name> 或直接作为位置参数传递。
  * 如果不提供 --project，默认从 CWD 向上查找包含 cocos-dna/ 的目录。
  */
 
@@ -459,9 +461,31 @@ function main() {
         process.exit(1);
     }
 
-    // 解析 --page
+    // 解析 --page (支持 --page <name> 或位置参数)
     const pageIdx = args.indexOf('--page');
-    const pageFilter = pageIdx >= 0 && args[pageIdx + 1] ? args[pageIdx + 1] : null;
+    let pageFilter = pageIdx >= 0 && args[pageIdx + 1] ? args[pageIdx + 1] : null;
+
+    // 如果没有 --page，收集位置参数（非 flag、非 flag 值的参数）作为页面名
+    if (!pageFilter) {
+        const flagsWithValue = new Set(['--project', '--page']);
+        const flagsNoValue = new Set(['--check', '--verbose', '--no-discover']);
+        const consumed = new Set();
+        for (let i = 0; i < args.length; i++) {
+            if (flagsNoValue.has(args[i])) { consumed.add(i); continue; }
+            if (flagsWithValue.has(args[i])) { consumed.add(i); consumed.add(i + 1); i++; continue; }
+        }
+        const positional = args.filter((_, i) => !consumed.has(i) && !args[_]?.startsWith?.('--'));
+        // 实际过滤：排除以 -- 开头的未知 flag
+        const realPositional = [];
+        for (let i = 0; i < args.length; i++) {
+            if (consumed.has(i)) continue;
+            if (args[i].startsWith('--')) continue; // 未知 flag，跳过
+            realPositional.push(args[i]);
+        }
+        if (realPositional.length > 0) {
+            pageFilter = realPositional[0];
+        }
+    }
 
     const designDnaDir = path.join(projectRoot, 'cocos-dna', 'components');
 

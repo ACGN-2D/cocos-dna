@@ -13,9 +13,24 @@
 - **视觉目标** — 从参考图分析得出
 - **游戏流位置** — 从启动到本页面的完整路径
 - 状态标记：🔨 设计中 / ✅ 已实施
-- **设计分辨率**（如 1280×720）
+- **设计分辨率**（如 1280×720）— 从 `design-dna.json` → `design_system.layout.design_resolution` 读取
+- **适配策略** — 从 `design-dna.json` → `design_system.layout.fit_strategy` 读取
+- **安全区域** — 从 `design-dna.json` → `design_system.layout.safe_area` 读取
 - **设计依据** — 列出 design-dna.json + 参考来源
 - **设计原则** — 3~5 条核心原则
+
+> **多分辨率适配方案**（必填，不可跳过）：
+>
+> 第1章必须包含「多分辨率适配」小节，说明：
+> 1. **设计分辨率 + 适配策略**：引用 design-dna.json 的 `layout.design_resolution` 和 `layout.fit_strategy`
+> 2. **安全区域**：Layer 1 交互 UI（按钮、文字、交互元素）必须在 `safe_area` 范围内
+> 3. **三层分类定位策略**：
+>    - **Layer 1 交互 UI**（按钮、标题、文本、HUD）→ **必须 Widget**，禁止 Position 定位到屏幕边缘
+>    - **Layer 2 结构容器**（Group、Panel、Container）→ **Widget + Layout**
+>    - **Layer 3 装饰/视觉元素**（背景纹理、齿轮装饰、光效、粒子）→ **可以用 Position**（Canvas 已统一缩放），不强制 Widget
+> 4. **全屏背景** → `Widget: LRTB=0`（撑满父容器）
+> 5. **Widget AlignMode 注意**：有持续动画的 Widget 节点必须设 `AlignMode=ONCE`（ALWAYS 会覆盖 tween 动画）
+> 6. **边缘裁切说明**：超出安全区域的 Layer 3 装饰元素在不同宽高比下的表现（裁切/隐藏）
 
 ### 第1.5章：参考图与设计溯源
 
@@ -328,6 +343,28 @@ interface BackgroundEffectSpec {
 - [ ] **每个 Group/Container/Row 容器节点声明了 `[Layout]` 组件或子节点有显式 `Position`**
 - [ ] **多子节点容器中，子节点 Position 不全为 (0,0)**（防止重叠）
 - [ ] **Layout spacing 值已明确标注**（不省略、不留默认 0）
+
+### 多分辨率适配（三层分类验证）
+- [ ] **第1章包含「多分辨率适配」小节**（适配策略 + 安全区域 + 三层分类说明）
+- [ ] **设计分辨率 + 适配策略（fit_strategy）已明确写出**，与 design-dna.json 一致
+- [ ] **全屏背景使用 `Widget: LRTB=0`**，不用固定尺寸的绝对坐标
+- [ ] **Layer 1 交互 UI（按钮、标题、文本、HUD）使用 Widget 定位**，禁止用 Position 定位到屏幕边缘
+- [ ] **Layer 2 结构容器（Group、Panel）使用 Widget + Layout**
+- [ ] **Layer 3 装饰元素（齿轮、光效、粒子）可以用 Position**，不强制 Widget
+- [ ] **关键交互元素在安全区域内**（不依赖设计分辨率的绝对边缘坐标）
+- [ ] **居中内容使用 Widget 水平居中**或父容器 + Layout 居中
+- [ ] **无超出安全区域的关键 UI 元素**（装饰/背景允许超出）
+- [ ] **有持续动画的 Widget 节点设置 AlignMode=ONCE**（禁止 ALWAYS，会覆盖 tween 动画）
+- [ ] **Canvas 节点未添加 Widget 组件**（官方禁止，会导致 size 锁定）
+- [ ] **不存在过度约束**（不是所有节点都用 Widget，装饰类节点应用 Position）
+
+### 坐标换算（参考图分辨率 ≠ 设计分辨率时必检）
+- [ ] **已识别参考图分辨率**，并与 design-dna.json 的 `layout.design_resolution` 对比
+- [ ] **所有 Position 和 UITransform 尺寸已按比例换算**到设计分辨率（scaleX/scaleY）
+- [ ] **换算后按三层分类决定定位方式**：交互UI→Widget / 容器→Widget+Layout / 装饰→Position
+- [ ] **无未换算的参考图原始坐标**（如 1220 高度参考图中的 y=-500 不应出现在 720 高度设计中）
+- [ ] **底部/顶部交互 UI 使用 Widget Bottom/Top 锚定**，而非依赖换算后仍可能超出的 y 坐标
+- [ ] **装饰元素使用换算后的 Position 坐标**，不强制转为 Widget
 
 ### i18n 双语
 - [ ] 所有 Label 同时列出中文和英文

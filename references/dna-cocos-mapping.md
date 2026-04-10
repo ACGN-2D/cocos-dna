@@ -17,8 +17,11 @@
 | `typography.type_scale.*` | `cc.Label.fontSize` + `cc.Label.lineHeight` | 各级字号直接映射 |
 | `spacing.base_unit` | `cc.Layout.paddingLeft/Right/Top/Bottom` | 间距值映射 Layout padding |
 | `spacing.scale` | `cc.Layout.spacingX/Y` | 间距阶梯映射 Layout spacing |
+| `layout.design_resolution` | Canvas `_designResolution` | 项目的 Canvas 设计分辨率必须与此值一致。**Agent 不改项目的 Canvas**，而是确保 design.md 坐标基于此分辨率。**⚠️ 如果参考图分辨率与设计分辨率不同，必须先做坐标换算**（见 SKILL.md「参考图坐标换算规则」） |
+| `layout.fit_strategy` | Canvas `_fitHeight` / `_fitWidth` | `"fitHeight"` → `_fitHeight=true`；`"fitWidth"` → `_fitWidth=true`；`"showAll"` → 两者都 true；`"noBorder"` → 两者都 false |
+| `layout.safe_area` | Widget 定位参考区域 | **Layer 1 交互 UI** 必须在 safe_area 范围内。**Layer 3 装饰元素**可以超出安全区域（宽屏正常显示，窄屏允许裁切）。**⚠️ safe_area 外的交互 UI 在窄屏设备上不可见** |
 | `layout.grid_system` | `cc.Layout` (HORIZONTAL/VERTICAL/GRID) | 根据类型选择布局方向 |
-| `layout.alignment_tendency` | `cc.Widget` 锚点配置 | "centered" → 水平/垂直居中对齐 |
+| `layout.alignment_tendency` | `cc.Widget` 锚点配置 | "centered" → 水平/垂直居中对齐。**注意三层分类**：只有 Layer 1/2 用 Widget 对齐，Layer 3 装饰用 Position（详见 [node-spec.md](node-spec.md)「UI 布局三层分类规则」） |
 | `shape.border_radius` | 九宫格 Sprite 或自定义 Mask | 圆角通过 9-slice 或 Graphics 实现 |
 | `elevation.levels` | `cc.Sprite` 阴影层节点 | 每级阴影 → 独立 Sprite 节点偏移 + 模糊 |
 | `motion.easing` | `cc.tween().to({easing})` | 缓动曲线字符串映射 Tween easing |

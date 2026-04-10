@@ -36,8 +36,27 @@
 
 ### 项目设计系统一致性检查
 - **配色引用**：文档中的色值应与项目 `cocos-dna/design-dna.json` 中 `design_system.color` 的定义一致
-- **设计分辨率**：文档中应出现项目设定的设计分辨率（从 `design-dna.json` 或 `RendererConfig` 读取）
+- **设计分辨率**：文档中应出现项目设定的设计分辨率（从 `design-dna.json` → `design_system.layout.design_resolution` 读取）
 - **双语支持**：UI 文本元素应标注 i18n key（如项目启用了 i18n）
+
+### 多分辨率适配检查（三层分类验证）
+- **适配策略声明**：第1章必须包含「多分辨率适配」小节，说明 fit_strategy + 安全区域 + 三层分类定位策略
+- **fit_strategy 一致**：文档中的适配策略与 `design-dna.json` → `design_system.layout.fit_strategy` 一致
+- **safe_area 声明**：如 design-dna.json 中定义了 `layout.safe_area`，文档必须引用
+- **三层分类检查**（⚠️ 核心验证项）：
+  - **Layer 1 交互 UI**（按钮、标题、文本、HUD、版本号）→ **必须 Widget**，禁止用 Position 定位到屏幕边缘。违反报 ❌
+  - **Layer 2 结构容器**（Group、Panel、Container）→ **Widget + Layout**。违反报 ⚠️
+  - **Layer 3 装饰元素**（背景纹理、齿轮、光效、粒子）→ **可以用 Position**（Canvas 已统一缩放）。不强制 Widget
+  - **⚠️ 过度约束检查**：如果装饰元素也全部用了 Widget，报 ⚠️（不是错误，但说明可能过度约束）
+- **Widget 具体检查**：
+  - 全屏背景/遮罩 → `[Widget: LRTB=0]` ✅
+  - 屏幕边缘固定 UI（返回按钮、版本号） → `[Widget: 方向=值]` ✅
+  - 底部/顶部 UI 栏 → `[Widget: Bottom/Top=值]` ✅
+- **Widget AlignMode 检查**：有持续动画（旋转、平移）的 Widget 节点必须标注 `AlignMode=ONCE`。使用 `ALWAYS` + 动画 → 报 ❌
+- **安全区域越界检查**：Layer 1 交互 UI 的坐标是否在安全区域内。如果某个按钮 `Position: (0, -500)` 而安全区域高度只有 720，则报 ❌
+- **Canvas Widget 检查**：Canvas 节点不得添加 Widget 组件。违反报 ❌
+- **坐标换算检查**：如果参考图分辨率已知（第1.5章记录），验证 design.md 中的坐标是否已按比例换算到设计分辨率。**未换算的坐标**（如参考图 1220 高度中的 y=-500 直接写入 720 高度的设计）报 ❌
+- **分层定位一致性检查**：换算后的交互 UI（Layer 1）是否使用 Widget 定位，装饰元素（Layer 3）是否使用 Position 定位。交互 UI 用 Position 定位到屏幕边缘 → 报 ❌
 
 ---
 
@@ -51,6 +70,9 @@
 1. **节点存在性**：design.md 第4章声明的每个节点名都必须出现在 .prefab JSON 中的 `"_name"` 字段
 2. **UITransform**：根节点必须有 `cc.UITransform` 组件
 3. **PageComp 挂载**：根节点必须挂载对应的 `<Page>PageComp` 组件
+4. **Widget 存在性**：根节点（全屏页面）应有 `cc.Widget` 组件（`LRTB=0`），确保跟随 Canvas 尺寸适配
+5. **背景 Widget**：BG 节点（全屏背景）应有 `cc.Widget`（`LRTB=0`），不应依赖固定 UITransform 尺寸
+6. **边缘元素 Widget**：design.md 中标注了 Widget 的边缘元素，在 Prefab 中必须有对应的 `cc.Widget` 组件
 
 ### 必需节点验证
 

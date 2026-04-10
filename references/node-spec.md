@@ -182,6 +182,140 @@ if (continueBtn) continueBtn.setPosition(0, -48, 0);
 
 ---
 
+## 多分辨率适配 — UI 布局三层分类规则
+
+> **官方依据**：[Cocos Creator 多分辨率适配方案](https://docs.cocos.com/creator/3.8/manual/zh/ui-system/components/engine/multi-resolution.html) + [Widget 组件](https://docs.cocos.com/creator/3.8/manual/zh/ui-system/components/editor/widget.html) + [对齐策略](https://docs.cocos.com/creator/3.8/manual/zh/ui-system/components/engine/widget-align.html)
+>
+> **核心原则**：
+> 1. **Canvas 负责整体缩放** — 统一缩放所有渲染元素（设计分辨率 → 屏幕分辨率）
+> 2. **Widget 负责 UI 对齐** — 确保元素在不同分辨率/宽高比下保持正确的语义位置
+> 3. **不是所有节点都需要 Widget** — 只有「需要在不同分辨率保持语义位置」的 UI 元素才用 Widget
+>
+> ⚠️ **过度使用 Widget 的危害**：Widget 嵌套过深 → 计算复杂 → 调试困难 → over-constrained UI
+
+### ⭐ 三层分类规则（核心决策表）
+
+| 层级 | 元素类型 | 定位方式 | 判断标准 | 说明 |
+|------|---------|---------|---------|------|
+| **Layer 1: 交互 UI** | 按钮、标题、文本、HUD、输入框、提示、版本号 | **必须 Widget** | 「这个节点需要在不同分辨率保持语义位置吗？」→ ✅ 是 | 禁止用 Position 定位到屏幕边缘 |
+| **Layer 2: 结构容器** | Panel、Group、Container、List、Row | **Widget + Layout** | 容器负责管理子节点排列 | Widget 定位容器自身，Layout 排列子节点 |
+| **Layer 3: 装饰/视觉元素** | 背景纹理、齿轮装饰、飘带、光效、粒子 | **可以用 Position** | 「这个节点需要在不同分辨率保持语义位置吗？」→ ❌ 不需要 | Canvas 已统一缩放，装饰不需精确对齐 |
+
+### Layer 1: 交互 UI — Widget 策略详表
+
+| 场景 | Widget 配置 | 节点树标记 | 说明 |
+|------|------------|-----------|------|
+| 全屏背景/遮罩 | 四边撑满 | `[Widget: LRTB=0]` | 同时 Left+Right → 自动拉伸宽度；同时 Top+Bottom → 自动拉伸高度 |
+| 顶部 UI（标题、返回按钮） | 锚定顶部 | `[Widget: Top=40, HCenter=0]` | 不同设备顶部高度不同（刘海/平板） |
+| 底部 UI（按钮、提示） | 锚定底部 | `[Widget: Bottom=60, HCenter=0]` | 底部区域在横屏设备上高度变化最大 |
+| 底部多元素（按钮+提示） | Layout 包一层 | `ButtonArea [Widget: Bottom=40, HCenter=0] [Layout: VERTICAL, spacing=16]` | 避免按钮与提示重叠 |
+| 屏幕四角固定 UI（设置按钮） | 锚定角落 | `[Widget: Top=20, Right=20]` | 不同宽高比仍在角落 |
+| 底部按钮栏（水平撑满） | 锚定底部+水平撑满 | `[Widget: Bottom=40, Left=0, Right=0]` | 宽度撑满，底部固定 |
+| 居中内容组 | 水平/垂直居中 | `[Widget: HCenter=0, VCenter=0]` | 任何分辨率都居中 |
+| 父容器内的子节点 | Position 或 Layout | `Position: (0, -80)` | 相对于父节点中心的相对定位 |
+
+### Layer 2: 结构容器 — Widget + Layout 策略
+
+容器节点**自身**用 Widget 确定在屏幕中的位置，**内部**用 Layout 或手动 Position 排列子节点。
+
+```
+ButtonArea [Node] [Widget: Bottom=60, HCenter=0] [Layout: VERTICAL, spacing=16, resizeMode=CONTAINER]
+├── StartBtn [Node] — 由 Layout 自动排列
+└── HintLabel [Label] — 由 Layout 自动排列
+```
+
+### Layer 3: 装饰元素 — Position 为主
+
+| 装饰类型 | 推荐定位 | 说明 |
+|---------|---------|------|
+| 纯视觉装饰（齿轮、飘带、纹理） | `Position: (x, y)`（换算后坐标） | Canvas 统一缩放即可，不同宽高比允许被裁切 |
+| 需要在宽窄屏都可见的角落装饰 | `[Widget: Top=20, Left=20, AlignMode=ONCE]` | ONCE = 仅初始化对齐一次 |
+| 有持续动画的装饰（旋转齿轮等） | `Position: (x, y)` | **⚠️ 禁止 Widget AlignMode=ALWAYS（每帧重置 Position，覆盖 tween 动画）** |
+
+> **判断原则**：「这个节点是否需要在不同分辨率保持语义位置？」
+> ✅ 是 → Widget（Layer 1/2）
+> ❌ 不是 → Position（Layer 3）
+
+### Widget AlignMode 说明（⚠️ 易踩坑）
+
+> 官方文档：Widget 的 AlignMode 属性决定运行时何时更新对齐。
+
+| AlignMode | 行为 | 适用场景 | 注意 |
+|-----------|------|---------|------|
+| **ON_WINDOW_RESIZE** | 仅窗口尺寸变化时对齐 | **推荐：大量 UI 元素**（性能最优） | 对齐后自动 `enabled=false` |
+| **ONCE** | 仅 `onEnable` 时对齐一次 | **有动画的 Widget 节点** | 对齐后可自由做 tween/动画 |
+| **ALWAYS** | 每帧重新对齐 | 仅特殊动态场景 | ⚠️ 会覆盖 Position/Scale 修改！禁止用于有动画的节点 |
+
+**design.md 标记格式**：
+```
+[Widget: Top=20, Left=20, AlignMode=ONCE]    — 有动画的装饰元素
+[Widget: Bottom=60, HCenter=0]               — 默认 ON_WINDOW_RESIZE（可省略）
+```
+
+### Widget 常用参数格式
+
+```
+[Widget: LRTB=0]                    — 四边撑满父容器（全屏背景）
+[Widget: Top=20, Right=20]          — 锚定右上角（返回按钮、设置按钮）
+[Widget: Bottom=40]                 — 锚定底部（底部栏）
+[Widget: Left=0, Right=0]           — 水平撑满（横向条幅）
+[Widget: HCenter=0]                 — 水平居中
+[Widget: VCenter=0]                 — 垂直居中
+[Widget: HCenter=0, VCenter=50]     — 居中偏上 50px
+[Widget: Top=20, Left=20, AlignMode=ONCE] — 锚定后释放（可做动画）
+```
+
+### ⚠️ 定位反模式（禁止）
+
+| ❌ 反模式 | 问题 | ✅ 正确做法 |
+|---------|------|-----------|
+| **交互 UI** 用 `Position: (600, -350)` | 在不同分辨率/宽高比下偏移出屏 | `[Widget: Bottom=20, Right=20]` |
+| 返回按钮 `Position: (-620, 340)` | 依赖设计分辨率的绝对左上角 | `[Widget: Top=20, Left=20]` |
+| 全屏背景 `[UITransform: 2712x1220]` 硬编码尺寸 | 换分辨率不匹配 | `[Widget: LRTB=0]`（自动撑满） |
+| **交互 UI** 底部按钮 `Position: (0, -500)` | 在 720p Canvas 上 y=-500 超出屏幕 | `[Widget: Bottom=60, HCenter=0]` |
+| 所有节点一律用 Widget（**过度约束**） | Widget 嵌套过深、计算复杂、调试困难 | 只有 Layer 1/2 用 Widget，Layer 3 装饰用 Position |
+| 有动画的节点用 `Widget AlignMode=ALWAYS` | 每帧重置 Position，tween 动画失效 | 用 Position 或 `Widget AlignMode=ONCE` |
+| Canvas 节点添加 Widget | Canvas 的 size 无法随屏幕变化 | **严禁给 Canvas 添加 Widget** |
+| 禁用 Widget 但不删除 | widget-manager 递归时会意外激活 | 不需要 Widget 的节点必须**彻底删除**而非禁用 |
+
+### ⚠️ 参考图坐标换算（必须在写入 design.md 前完成）
+
+> **核心问题**：用户提供的 UI 参考图/截图的分辨率（如 2712×1220）通常与项目设计分辨率（如 1280×720）不同。
+> 如果在 design.md 第4章中直接使用参考图的像素坐标，会导致所有节点偏移出屏。
+
+**换算公式**：
+
+```
+scaleX = design_resolution.width / 参考图宽度
+scaleY = design_resolution.height / 参考图高度
+
+Position: (参考图x × scaleX, 参考图y × scaleY)
+UITransform: 参考图w × scale, 参考图h × scale
+```
+
+**换算后 → 分层定位决策**：
+
+| 元素类型 | 换算后处理 | 说明 |
+|---------|-----------|------|
+| **交互 UI**（按钮、标题、文本） | 换算坐标 → 转为 Widget（Top/Bottom/HCenter/VCenter） | Widget 边距 = 设计高度/2 - |换算y| |
+| **结构容器** | 换算坐标 → Widget 定位 + Layout 排列子节点 | 容器用 Widget，子节点用 Layout |
+| **装饰元素** | 换算坐标 → 直接用 Position | Canvas 已缩放，Position 即可 |
+
+**禁止**：在 design.md 中写入未经换算的参考图原始坐标（如 `Position: (0, -500)` 来自 1220 高度的参考图）。
+
+### 安全区域与装饰元素
+
+根据 `design-dna.json` → `layout.safe_area` 定义的安全区域：
+
+- **关键 UI（Layer 1）**（按钮、文字、交互元素）：**必须在安全区域内**
+  - 居中内容：用 Widget 居中，自然在安全区域内
+  - 边缘内容：用 Widget 锚定，设定足够的边距
+- **装饰元素（Layer 3）**（背景延伸、角落装饰、粒子特效）：**可以超出安全区域**
+  - 在宽屏上正常显示，窄屏上允许被裁切
+  - 使用 Position 定位（Canvas 统一缩放）
+
+---
+
 ## 节点树书写格式
 
 ```

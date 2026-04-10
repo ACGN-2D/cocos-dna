@@ -175,7 +175,7 @@ class PrefabBuilder {
         });
     }
 
-    addWidget(nodeIdx, flags, top, bottom, left, right) {
+    addWidget(nodeIdx, flags, top, bottom, left, right, hCenter, vCenter) {
         return this._add({
             __type__: 'cc.Widget',
             _name: '',
@@ -188,8 +188,8 @@ class PrefabBuilder {
             _bottom: bottom || 0,
             _left: left || 0,
             _right: right || 0,
-            _horizontalCenter: 0,
-            _verticalCenter: 0,
+            _horizontalCenter: hCenter || 0,
+            _verticalCenter: vCenter || 0,
             _isAbsLeft: true,
             _isAbsRight: true,
             _isAbsTop: true,
