@@ -99,6 +99,36 @@ assets/resources/textures/              ← 动态加载（resources.load()）
 | 路径是字符串常量？ | → 优先考虑改为 @property 静态引用 |
 | 路径包含变量（如 `${characterId}`）？ | → 必须放 resources |
 
+### ⚠️ loadType 决策规则（Agent 必须遵守）
+
+**核心原则：static 优先，dynamic 是例外。**
+
+为每个资源回答以下 3 个问题，选择第一个匹配的结论：
+
+| # | 判断问题 | 如果"是" | loadType |
+|---|---------|---------|----------|
+| 1 | 路径中包含**变量**（如 `${characterId}`、`${enemyId}`）？ | 必须运行时拼接 | **dynamic** |
+| 2 | 同一节点会在运行时**切换不同图片**（如换肤、卡牌类型切换）？ | 需要动态替换 | **dynamic** |
+| 3 | 资源在整个页面生命周期中**固定不变**？（装饰、按钮底图、图标、背景、分隔线、粒子贴图等） | 可以直接绑 Prefab | **static** |
+
+**常见分类速查**：
+
+| 资源类型 | loadType | 理由 |
+|---------|----------|------|
+| 页面背景 | **static** | 固定不变，Prefab 直接引用 |
+| 装饰齿轮/图标 | **static** | 固定装饰，不会运行时切换 |
+| 按钮底图 (primary/secondary) | **static** | 通用固定样式 |
+| 分隔线 | **static** | 纯装饰 |
+| 粒子贴图 | **static** | 贴图本身固定（着色在代码中） |
+| 按钮悬停发光叠层 | **static** | 资源固定，只是透明度变化 |
+| 角色立绘 (`${id}`) | **dynamic** | 按数据 ID 动态加载 |
+| 卡牌背景 (按类型切换) | **dynamic** | 运行时数据驱动 |
+| 敌人图片 (`${id}`) | **dynamic** | 按数据 ID 动态加载 |
+| 主题皮肤资源 | **dynamic** | 运行时切换主题 |
+
+> **❌ 错误模式**：把所有资源都标 `dynamic`（"反正 resources.load 也能用"）。
+> 后果：resources/ 目录膨胀 → 包体增大 → 多余的异步 IO → 缓存管理负担。
+
 ### loadType 与目录的映射
 
 | loadType | assetPath 前缀 | 实现方式 |
@@ -160,7 +190,7 @@ assets/resources/textures/              ← 动态加载（resources.load()）
 | `category` | ✅ | 分类: background / decoration / icon / button / effect / character / card / frame / node / ui |
 | `type` | ✅ | Cocos 资源类型: sprite-frame / texture / spine / particle |
 | `status` | ✅ | 状态: missing / exists / ready / deprecated / size_mismatch |
-| `loadType` | ✅ | 加载方式: `static`（@property 绑定）/ `dynamic`（resources.load）。默认 `dynamic` |
+| `loadType` | ✅ | 加载方式: `static`（@property 绑定）/ `dynamic`（resources.load）。**⚠️ 无默认值，必须逐项判断**（见下方决策规则） |
 | `ownership` | ✅ | 归属层级: `common` / `page` / `module` / `entity-type`。决定 assetPath 中的子目录 |
 | `uuid` | - | 图片资源主 UUID（从 .meta 顶层 uuid） |
 | `spriteFrameUuid` | - | SpriteFrame 子资源 UUID（格式: `<uuid>@f9941`） |
@@ -430,7 +460,7 @@ private _loadBackgroundImage(): void {
 - `category` 枚举：`background | decoration | icon | button | effect | character | card | frame | node | ui`
 - `type` 枚举：`sprite-frame | texture | spine | particle`
 - `status` 枚举：`missing | exists | ready | deprecated | size_mismatch`
-- `loadType` 枚举：`static | dynamic`（默认 `dynamic`）
+- `loadType` 枚举：`static | dynamic`（**无默认值，必须逐项判断**，见「loadType 决策规则」）
 - `ownership` 枚举：`common | page | module | entity-type`
 - `sourceFile`：字符串或 null，指向 `cocos-dna/components/<page>/assets/raw/` 下的原始资产
 - `meta.size`：`{ w, h }` 为预设尺寸（必填），`resolve-asset-uuids.js` 直接从 Cocos `.meta` 文件的 `subMetas.f9941.userData.rawWidth/rawHeight` 读取实际像素尺寸进行校验（零额外 I/O），不符则标记 `size_mismatch`
