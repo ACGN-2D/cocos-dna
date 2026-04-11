@@ -1,20 +1,29 @@
 /**
  * BaseView — Unified Component base class for all page views
  *
- * [cocos-dna skill template — v1.0.0]
+ * [cocos-dna skill template — v1.1.0]
  *
  * Three-layer architecture (code isolation):
  *   Layer 1 — BaseView (runtime, skill-maintained, never hand-edit in project)
  *   Layer 2 — XxxView.generated.ts (AI-generated, safe to overwrite)
  *   Layer 3 — XxxView.ts (business logic, never overwritten by AI)
  *
+ * Auto-bind decorators (v1.1 — replaces @property + _bindNodeProperties):
+ *   @autoNode('NodeName')   → resolves to Node from Prefab tree
+ *   @autoLabel('NodeName')  → resolves to Label component on that node
+ *   @autoSprite('NodeName') → resolves to Sprite component on that node
+ *
+ *   These decorators work regardless of how the component is mounted:
+ *     - Editor serialization (@property in Prefab) → field already set, decorator skips
+ *     - Dynamic addComponent() → decorator resolves from _nodeRefs cache
+ *
  * Example:
  *   // Layer 2: AI-generated (auto-overwrite safe)
  *   // file: HomeView.generated.ts
  *   @ccclass('HomeViewGenerated')
  *   export class HomeViewGenerated extends BaseView {
- *       @property(Node) btnStart: Node = null!;
- *       @property(Label) txtTitle: Label = null!;
+ *       @autoNode('StartBtn') btnStart: Node = null!;
+ *       @autoLabel('Title')   txtTitle: Label = null!;
  *       protected get viewName() { return 'HomeView'; }
  *       protected get resourceGroup() { return 'home-page'; }
  *   }
@@ -40,6 +49,7 @@
  *
  * Key features:
  *   - Extends cc.Component → supports @property serialization
+ *   - Auto-bind decorators for addComponent() compatibility
  *   - Mounted on Prefab root node → Cocos engine drives lifecycle
  *   - No need for separate PageComp class → one class does both binding + logic
  *   - Resource group auto-release on dispose
@@ -47,12 +57,106 @@
  */
 
 import {
-    _decorator, Component, Node, Sprite, SpriteFrame,
+    _decorator, Component, Node, Sprite, SpriteFrame, Label,
     UITransform, Color, Prefab, instantiate, Widget, Tween
 } from 'cc';
 import { ResourceManager } from '../core/ResourceManager';
 
 const { ccclass, property } = _decorator;
+
+// ==================== Auto-Bind Decorators ====================
+
+/**
+ * Metadata key for auto-bind entries stored on the class prototype.
+ * Each entry describes one property that should be resolved from _nodeRefs at onLoad.
+ */
+const AUTO_BIND_META_KEY = '__autoBind__';
+
+/**
+ * Describes a single auto-bind entry.
+ *
+ * - 'node': resolve to `getNode(nodeName)`
+ * - 'label': resolve to `getNode(nodeName)?.getComponent(Label)`
+ * - 'sprite': resolve to `getNode(nodeName)?.getComponent(Sprite)`
+ */
+interface IAutoBindEntry {
+    /** The class property name to fill */
+    propertyKey: string;
+    /** The Prefab node name to look up in _nodeRefs */
+    nodeName: string;
+    /** What kind of reference to resolve */
+    type: 'node' | 'label' | 'sprite';
+}
+
+/**
+ * Internal helper — register an auto-bind entry on the class prototype.
+ * Called by each decorator factory.
+ */
+function _registerAutoBind(
+    prototype: any,
+    propertyKey: string,
+    nodeName: string,
+    type: IAutoBindEntry['type']
+): void {
+    // Ensure each class in the inheritance chain has its own list
+    if (!prototype.hasOwnProperty(AUTO_BIND_META_KEY)) {
+        // Copy parent entries (if any) to support inheritance
+        const parent: IAutoBindEntry[] = prototype[AUTO_BIND_META_KEY] || [];
+        prototype[AUTO_BIND_META_KEY] = [...parent];
+    }
+    (prototype[AUTO_BIND_META_KEY] as IAutoBindEntry[]).push({
+        propertyKey,
+        nodeName,
+        type,
+    });
+}
+
+/**
+ * Decorator: auto-bind a Node reference from the Prefab node tree.
+ *
+ * Works both with editor serialization (@property) and dynamic addComponent().
+ * If the field is already set (e.g. by Cocos @property deserialization), it is NOT overwritten.
+ * If null, it resolves from _nodeRefs (populated in onLoad via _registerChildNodes).
+ *
+ * Usage (Layer 2):
+ *   @autoNode('BattleBG')
+ *   background: Node = null!;
+ *
+ * Equivalent to:
+ *   @property(Node) background: Node = null!;
+ *   // + in _bindNodeProperties: if (!this.background) this.background = this.getNode('BattleBG')!;
+ */
+export function autoNode(nodeName: string): PropertyDecorator {
+    return (target: any, propertyKey: string | symbol) => {
+        _registerAutoBind(target, propertyKey as string, nodeName, 'node');
+    };
+}
+
+/**
+ * Decorator: auto-bind a Label component from the Prefab node tree.
+ *
+ * Usage (Layer 2):
+ *   @autoLabel('PlayerHPText')
+ *   playerHPText: Label = null!;
+ */
+export function autoLabel(nodeName: string): PropertyDecorator {
+    return (target: any, propertyKey: string | symbol) => {
+        _registerAutoBind(target, propertyKey as string, nodeName, 'label');
+    };
+}
+
+/**
+ * Decorator: auto-bind a Sprite component from the Prefab node tree.
+ *
+ * Usage (Layer 2):
+ *   @autoSprite('PlayerPortrait')
+ *   playerPortrait: Sprite = null!;
+ */
+export function autoSprite(nodeName: string): PropertyDecorator {
+    return (target: any, propertyKey: string | symbol) => {
+        _registerAutoBind(target, propertyKey as string, nodeName, 'sprite');
+    };
+}
 
 // ==================== View State ====================
 
@@ -261,6 +365,9 @@ export abstract class BaseView extends Component {
 
         // Register all child nodes for dynamic lookup
         this._registerChildNodes(this.node);
+
+        // Auto-bind decorated properties (@autoNode, @autoLabel, @autoSprite)
+        this._autoBindDecoratedProperties();
 
         // Auto-bind dynamic assets from manifest (fire-and-forget)
         this._bindManifestAssets();
@@ -574,6 +681,73 @@ export abstract class BaseView extends Component {
                 this._nodeRefs.set(child.name, child);
             }
             this._registerChildNodes(child);
+        }
+    }
+
+    /**
+     * Auto-bind all properties decorated with @autoNode, @autoLabel, @autoSprite.
+     *
+     * For each decorated property:
+     *   1. If already non-null (e.g. from @property editor serialization) → skip
+     *   2. Otherwise look up the node from _nodeRefs by nodeName
+     *   3. For 'node' type → assign the Node directly
+     *   4. For 'label' type → getComponent(Label) from the node
+     *   5. For 'sprite' type → getComponent(Sprite) from the node
+     *
+     * This makes Layer 2 code work identically whether the component is:
+     *   - Mounted in the Prefab editor (Cocos @property deserialization fills fields)
+     *   - Added dynamically via addComponent() (decorators fill fields from node tree)
+     */
+    private _autoBindDecoratedProperties(): void {
+        const entries: IAutoBindEntry[] | undefined = (this as any)[AUTO_BIND_META_KEY];
+        if (!entries || entries.length === 0) return;
+
+        let boundCount = 0;
+        let failCount = 0;
+
+        for (const entry of entries) {
+            // Skip if already bound (e.g. by Cocos @property serialization)
+            if ((this as any)[entry.propertyKey] != null) continue;
+
+            const node = this._nodeRefs.get(entry.nodeName);
+            if (!node) {
+                failCount++;
+                console.warn(`[${this.viewName}] autoBind: node '${entry.nodeName}' not found for property '${entry.propertyKey}'`);
+                continue;
+            }
+
+            switch (entry.type) {
+                case 'node':
+                    (this as any)[entry.propertyKey] = node;
+                    boundCount++;
+                    break;
+                case 'label': {
+                    const label = node.getComponent(Label);
+                    if (label) {
+                        (this as any)[entry.propertyKey] = label;
+                        boundCount++;
+                    } else {
+                        failCount++;
+                        console.warn(`[${this.viewName}] autoBind: Label not found on node '${entry.nodeName}' for property '${entry.propertyKey}'`);
+                    }
+                    break;
+                }
+                case 'sprite': {
+                    const sprite = node.getComponent(Sprite);
+                    if (sprite) {
+                        (this as any)[entry.propertyKey] = sprite;
+                        boundCount++;
+                    } else {
+                        failCount++;
+                        console.warn(`[${this.viewName}] autoBind: Sprite not found on node '${entry.nodeName}' for property '${entry.propertyKey}'`);
+                    }
+                    break;
+                }
+            }
+        }
+
+        if (boundCount > 0 || failCount > 0) {
+            console.log(`[${this.viewName}] autoBind: ${boundCount} bound, ${failCount} failed (total ${entries.length} entries)`);
         }
     }
 

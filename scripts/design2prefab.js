@@ -340,13 +340,16 @@ function _matchNodeLine(line) {
             continue;
         }
 
-        // Layout: HORIZONTAL/VERTICAL with optional spacing
-        // e.g. [Layout: VERTICAL, spacing=16] or [Layout: HORIZONTAL, spacing=40]
-        const layoutBracketMatch = tag.match(/^Layout:\s*(HORIZONTAL|VERTICAL)(?:\s*,?\s*spacing\s*=?\s*(\d+))?/i);
+        // Layout: HORIZONTAL/VERTICAL with optional spacing and resizeMode
+        // e.g. [Layout: VERTICAL, spacing=16, resizeMode=CONTAINER]
+        const layoutBracketMatch = tag.match(/^Layout:\s*(HORIZONTAL|VERTICAL)(?:\s*,?\s*spacing\s*=?\s*(\d+))?(?:\s*,?\s*resizeMode\s*=?\s*(NONE|CONTAINER|CHILDREN))?/i);
         if (layoutBracketMatch) {
             spec._layout = layoutBracketMatch[1].toUpperCase();
             if (layoutBracketMatch[2]) {
                 spec._layoutSpacing = parseInt(layoutBracketMatch[2]);
+            }
+            if (layoutBracketMatch[3]) {
+                spec._layoutResizeMode = layoutBracketMatch[3].toUpperCase();
             }
             continue;
         }
@@ -671,6 +674,8 @@ function _parsePropertyLine(line, spec) {
         spec._layout = layoutMatch[1].toUpperCase();
         const spacingMatch = clean.match(/spacing[X]?\s*=?\s*(\d+)/i);
         if (spacingMatch) spec._layoutSpacing = parseInt(spacingMatch[1]);
+        const resizeModeMatch = clean.match(/resizeMode\s*=?\s*(NONE|CONTAINER|CHILDREN)/i);
+        if (resizeModeMatch) spec._layoutResizeMode = resizeModeMatch[1].toUpperCase();
         return;
     }
 
@@ -1034,8 +1039,11 @@ function buildOffline(nodeTree, opts) {
             const layoutType = spec._layout === 'VERTICAL' ? 2 : 1;
             const spacingX = spec._layoutSpacing || 0;
             const spacingY = spec._layoutSpacingY || spec._layoutSpacing || 0;
-            // resizeMode=0 (NONE) — 容器尺寸固定，不随子节点变化
-            b.addLayout(info.nodeIdx, layoutType, spacingX, spacingY, 0);
+            // resizeMode: NONE=0, CHILDREN=1, CONTAINER=2
+            let resizeMode = 0;
+            if (spec._layoutResizeMode === 'CONTAINER') resizeMode = 2;
+            else if (spec._layoutResizeMode === 'CHILDREN') resizeMode = 1;
+            b.addLayout(info.nodeIdx, layoutType, spacingX, spacingY, resizeMode);
         }
 
         // Button
@@ -1200,13 +1208,20 @@ function _mapCacheMode(mode) {
 }
 
 function _computeWidgetFlags(widget) {
+    // Bit definitions from Cocos engine source: cocos/ui/widget.ts → enum AlignFlags
+    //   TOP    = 1 << 0 = 1
+    //   MID    = 1 << 1 = 2   (vertical center)
+    //   BOT    = 1 << 2 = 4
+    //   LEFT   = 1 << 3 = 8
+    //   CENTER = 1 << 4 = 16  (horizontal center)
+    //   RIGHT  = 1 << 5 = 32
     let flags = 0;
-    if (widget.top !== undefined) flags |= 1;      // TOP
-    if (widget.bottom !== undefined) flags |= 2;    // BOTTOM
-    if (widget.left !== undefined) flags |= 4;      // LEFT
-    if (widget.right !== undefined) flags |= 8;     // RIGHT
-    if (widget.hCenter !== undefined) flags |= 16;  // HORIZONTAL_CENTER
-    if (widget.vCenter !== undefined) flags |= 32;  // VERTICAL_CENTER
+    if (widget.top !== undefined) flags |= 1;       // TOP    = 1 << 0
+    if (widget.bottom !== undefined) flags |= 4;    // BOT    = 1 << 2
+    if (widget.left !== undefined) flags |= 8;      // LEFT   = 1 << 3
+    if (widget.right !== undefined) flags |= 32;    // RIGHT  = 1 << 5
+    if (widget.hCenter !== undefined) flags |= 16;  // CENTER = 1 << 4
+    if (widget.vCenter !== undefined) flags |= 2;   // MID    = 1 << 1
     return flags;
 }
 

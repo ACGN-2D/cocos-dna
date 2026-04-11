@@ -79,8 +79,8 @@ Phase 1: 结构          Phase 2: 分析          Phase 3: 生成（Cocos 转换
 5. **⚠️ 参考图坐标换算（不可跳过）** — 见下方「参考图坐标换算规则」
 6. **⚠️ 询问动态效果（不可跳过）** — 见下方「动态效果确认」
 7. **DNA → Cocos 组件映射** — 按映射表确定层级结构和组件分配。**必须按三层分类规则决定定位方式**（Layer 1 交互UI→Widget / Layer 2 容器→Widget+Layout / Layer 3 装饰→Position）
-8. **输出文档 + 代码** — 见下方「产出物清单」
-9. **MCP 创建 Prefab** — 按 MCP 调用序列自动创建节点树
+8. **输出文档 + 代码（Phase 3a）** — 见下方「产出物清单」。此步输出 design.md + asset-manifest(UUID=null) + art-prompts.md + View.generated.ts + PageView.ts。**不依赖美术资源和 MCP**
+9. **资源绑定 + MCP 创建 Prefab（Phase 3b）** — 美术资源到位后执行。按场景 H 流程：resolve-asset-uuids → generate-view → design2prefab（MCP-Only，不降级）
 10. **验证** — 按验证清单自检，见 → [references/output-spec.md](references/output-spec.md)
 
 ### ⚠️ 页面目录初始化（必须在输出任何文件前执行）
@@ -94,6 +94,7 @@ Phase 1: 结构          Phase 2: 分析          Phase 3: 生成（Cocos 转换
 cocos-dna/components/<page>/
 ├── design.md                  ← 步骤 7 输出
 ├── asset-manifest.json        ← 步骤 7 输出
+├── view-manifest.json         ← 步骤 7 输出（从 design.md 第6.2章 @property 映射表提取）
 ├── assets/
 │   ├── art-prompts.md         ← 步骤 7 输出（AI 绘图 Prompt，基于 design.md 第6章资源清单）
 │   └── raw/
@@ -183,27 +184,56 @@ Card 500×600 → 236×354（按 scaleX 等比缩放）
 - [ ] 关键 UI 元素在安全区域内
 - [ ] 有持续动画的 Widget 节点设置 `AlignMode=ONCE`
 
-### ⚠️ MCP 降级策略
+### ⚠️ MCP 策略：MCP-Only（无降级）
 
-当 MCP Server 不可用时（连接超时、未启动、端口占用等），**不应阻塞整个 Phase 3 流程**。按以下降级方案输出：
+> **核心原则**：Cocos Creator 是引擎项目，Prefab 必须通过 MCP 在编辑器中创建才能保证组件初始化、UUID 分配、序列化格式正确。
+> **不存在"优雅降级"** — Offline 生成的 Prefab JSON 在编辑器中经常组件丢失、打不开，最终还是要用 MCP 重做。
 
-| 降级级别 | 条件 | 输出 |
-|---------|------|------|
-| **L1 完整模式** | MCP 正常连通 | design.md + View.generated.ts + PageView.ts + MCP 自动生成 Prefab |
-| **L2 文档模式** | MCP 不可用 | design.md + View.generated.ts + PageView.ts + **Prefab 节点树定义文档**（第4章详细到可手动创建） |
-| **L3 最小模式** | MCP 不可用且缺少模板信息 | design.md（9章完整） |
+**MCP 不可用时的 Agent 行为**：
 
-**降级时的 Agent 行为**：
-
-1. 在输出开头明确标注：`⚠️ MCP Server 未连通，已降级到 L2 文档模式`
+1. **不降级、不绕过** — 明确告知用户 MCP 不可用，Prefab 步骤暂停
 2. 输出 MCP 启动指引：
    ```
-   请在终端启动 Cocos MCP Server：
+   ⛔ MCP Server 未连通，Prefab 创建步骤暂停。
+   请启动 Cocos MCP Server：
    node <cocos-cli-path>/dist/cli.js start-mcp-server
-   启动后可重新执行 Prefab 创建步骤。
+   启动后执行「场景 H：资源到位 + Prefab 创建」继续。
    ```
-3. design.md 第4章节点树写到**可直接在 Cocos Creator 编辑器中手动创建**的精度（含每个节点的组件类型、属性值、锚点、尺寸）
-4. 所有代码文件（View.generated.ts / PageView.ts）正常输出，不依赖 MCP
+3. **Phase 3a 的产出物正常输出**（design.md + View.generated.ts + PageView.ts），这些不依赖 MCP
+4. **禁止使用 `--offline` 作为正式产出路径**。`--offline` 和 `--dry-run` 仅用于调试/预览节点树结构
+
+> 💡 **`design2prefab.js` 的 `--offline` 模式保留但重新定位**：它是开发者调试工具（预览 Prefab JSON 结构），不是产出物生成路径。正式 Prefab 必须走 MCP。
+
+### ⚠️ 美术资源异步工作流（渐进式完成）
+
+> **现实场景**：Phase 3 设计阶段先输出 art-prompts.md（AI 绘图 Prompt），美术资源**异步、逐步**生成。
+> 代码不应等美术资源就位才开始写 — 应该先写代码，资源到位后再绑定。
+
+**Phase 3 拆分为两个可独立执行的子阶段**：
+
+| 子阶段 | 时机 | 产出物 | 依赖 MCP |
+|--------|------|--------|----------|
+| **Phase 3a: 设计 + 代码** | 立即执行 | design.md + asset-manifest(UUID=null) + art-prompts.md + View.generated.ts + PageView.ts | ❌ 不依赖 |
+| **Phase 3b: 资源绑定 + Prefab** | 美术资源到位后 | asset-manifest(UUID已填充) + View.generated.ts(刷新) + Prefab | ✅ 需要 MCP |
+
+**Phase 3a 详细步骤**（美术资源到位前）：
+
+```
+A1  sync-runtime.js (如需)     → 同步 runtime 模板
+A2  AI 手写 design.md          → 9章完整，第6章资源清单包含预设路径
+A3  AI 手写 asset-manifest.json → uuid/spriteFrameUuid 填 null，status 填 "pending"
+A3b AI 手写 view-manifest.json → 从 design.md 第4章 @property 映射表提取 UI 节点绑定（结构化 JSON）
+A4  AI 手写 art-prompts.md     → 每资源独立 Prompt
+A5  generate-view.js <page>    → Layer 2 .generated.ts（读取 view-manifest.json + asset-manifest.json 两个数据源）
+A6  AI 手写 PageView.ts        → Layer 3 业务逻辑（引用节点名，不依赖具体资源 UUID）
+A7  AI 手写 ThemeConfig 等     → 主题配置
+```
+
+> **generate-view.js 数据源**：`view-manifest.json`（UI 节点绑定 → @autoNode/@autoLabel/@autoSprite）+ `asset-manifest.json`（资源清单 → assetManifest getter + @property(SpriteFrame)）
+
+> **Phase 3a 的代码是可编译可运行的** — Sprite 节点暂时无纹理（白色占位），但逻辑、布局、动画、交互都已就位。
+
+**Phase 3b 详细步骤**（美术资源到位后 = 场景 H）：→ 见下方场景 H
 
 ---
 
@@ -243,6 +273,7 @@ Card 500×600 → 236×354（按 scaleX 等比缩放）
 | 1 | Design DNA JSON | `cocos-dna/design-dna.json` | **全局设计 token SSOT**（色彩/字体/间距/动效/风格）+ 页面轻量索引。**禁止**在此存储页面级设计详情 |
 | 2 | UI 结构协议文档 | `cocos-dna/components/<page>/design.md` | 9章 Markdown（含第1.5章），页面设计数据的唯一存储位置 |
 | 3 | 资产绑定清单 | `cocos-dna/components/<page>/asset-manifest.json` | Sprite UUID 映射。运行 `resolve-asset-uuids.js` Smart Discovery 自动同步 |
+| 3b | UI 节点绑定清单 | `cocos-dna/components/<page>/view-manifest.json` | 从 design.md 第6.2章 @property 映射表提取的结构化 JSON。`generate-view.js` 读取此文件生成 @autoNode/@autoLabel/@autoSprite 声明 |
 | 4 | AI 绘图 Prompt | `cocos-dna/components/<page>/assets/art-prompts.md` | 美术资源生成指引，**每个资源独立一节**（`## 资源 #N: 描述 — filename.png`），严禁合并。格式规范见 → [references/output-spec.md](references/output-spec.md) |
 | 5a | **三层架构** — AI 生成层 | `assets/scripts/views/<Page>View.generated.ts` | Layer 2：@property 声明 + assetManifest（AI 可安全覆盖） |
 | 5b | **三层架构** — 业务逻辑层 | `assets/scripts/views/<Page>PageView.ts` | Layer 3：业务逻辑（人写，AI **永不覆盖**） |
@@ -300,7 +331,8 @@ Card 500×600 → 236×354（按 scaleX 等比缩放）
 ├── components/              ← 各 UI 页面的设计数据
 │   ├── <page-name>/
 │   │   ├── design.md        ← 页面级设计数据的唯一存储位置（9 章）
-│   │   ├── asset-manifest.json
+│   │   ├── asset-manifest.json  ← 资源清单（路径 + UUID + 加载方式）
+│   │   ├── view-manifest.json   ← UI 节点绑定（property 名 + cc 类型 + Prefab 节点名）
 │   │   ├── assets/
 │   │   │   ├── art-prompts.md    ← AI 绘图 Prompt
 │   │   │   └── raw/              ← AI 生成的原始资产（不参与 Cocos 构建）
@@ -313,7 +345,8 @@ Card 500×600 → 236×354（按 scaleX 等比缩放）
 ├── README.md                ← 索引说明 + 数据边界 + 新建流程
 └── _example-page/           ← 模拟完整页面目录
     ├── design.md            ← design.md 9 章完整格式模板
-    ├── asset-manifest.json
+    ├── asset-manifest.json  ← 资源清单格式示例
+    ├── view-manifest.json   ← UI 节点绑定格式示例
     ├── references/README.md
     └── assets/art-prompts.md
 ```
@@ -342,7 +375,7 @@ Card 500×600 → 236×354（按 scaleX 等比缩放）
 | [output-spec.md](references/output-spec.md) | design.md 9章详细定义（含第1.5章）+ 动效接口 + 验证清单 | Phase 3 编写 design.md、最终验证 |
 | [node-spec.md](references/node-spec.md) | 节点命名规范、节点信息格式 | Phase 3 构建第4/6章节点树 |
 | [asset-binding.md](references/asset-binding.md) | 资产绑定协议、Schema、状态机、静态 vs 动态资源目录决策、**Smart Discovery 规范** | Phase 3 生成第6.5章、资产同步 |
-| `examples/_example-page/`（skill 目录下） | 完整页面目录结构示例（design.md 9章 + asset-manifest + references + art-prompts） | 理解输出格式、新页面目录结构 |
+| `examples/_example-page/`（skill 目录下） | 完整页面目录结构示例（design.md 9章 + asset-manifest + view-manifest + references + art-prompts） | 理解输出格式、新页面目录结构 |
 | [cocos-constraints.md](references/cocos-constraints.md) | Cocos 技术栈禁止清单与约束 | 代码生成/任务规划时自检 |
 | [validate-workflow.md](references/validate-workflow.md) | V1-V4 验证规范（设计文档/Prefab/代码/测试） | Phase 3 完成后自动验证 |
 | [runtime-integration.md](references/runtime-integration.md) | Runtime 集成规范（ResourceManager/LayerManager 同步与改造指南） | Phase 3 代码生成、runtime 集成 |
@@ -434,9 +467,9 @@ Phase 3 设计       美术资源生成         资产同步              Prefab
 
 | 模式 | 命令 | 说明 |
 |------|------|------|
-| dry-run | `--dry-run` | 仅解析 + 打印 NodeSpec 树 |
-| MCP | （默认） | 需 Cocos 编辑器运行，实时创建节点 + 保存 Prefab |
-| Offline | `--offline` | 不需编辑器，直接写 .prefab JSON 文件 |
+| dry-run | `--dry-run` | 仅解析 + 打印 NodeSpec 树（调试用） |
+| **MCP** | （默认） | **正式产出路径** — 需 Cocos 编辑器运行，实时创建节点 + 保存 Prefab |
+| Offline | `--offline` | **仅调试/预览** — 不需编辑器，生成 .prefab JSON 供检查结构，不作为正式产出物 |
 
 **SpriteFrame 绑定流程（双策略）**：
 1. **显式绑定** — design.md 节点中 `SpriteFrame: xxx.png` → 从 asset-manifest 查找 `filename === xxx.png && (status === 'ready' || status === 'size_mismatch')` → 获取 `spriteFrameUuid` → MCP `setSpriteFrame()` / Offline `__uuid__` 绑定
@@ -454,7 +487,7 @@ Phase 3 设计       美术资源生成         资产同步              Prefab
 | [prefab-builder.js](scripts/prefab-builder.js) | 🔧 底层库 | 离线 Prefab JSON 构建器（不需编辑器） | `require()` 内部调用；`node scripts/prefab-builder.js` 自测 |
 | [resolve-asset-uuids.js](scripts/resolve-asset-uuids.js) | ⚙️ 数据同步 | **v2.0** Smart Discovery 资产 UUID 解析 | `node scripts/resolve-asset-uuids.js --project <P> [--page <id>] [--check] [--verbose]` |
 | [design2prefab.js](scripts/design2prefab.js) | ⚙️ 生成 | design.md #4 → NodeSpec → MCP/Offline Prefab | `node scripts/design2prefab.js --project <P> <page> [--dry-run\|--offline]` |
-| [generate-view.js](scripts/generate-view.js) | ⚙️ 生成 | asset-manifest → Layer 2 XxxView.generated.ts | `node scripts/generate-view.js <page> [--dry-run] [--out <dir>]` |
+| [generate-view.js](scripts/generate-view.js) | ⚙️ 生成 | view-manifest + asset-manifest → Layer 2 XxxView.generated.ts | `node scripts/generate-view.js [--project <P>] <page\|all> [--dry-run] [--out <dir>]` |
 | [sync-runtime.js](scripts/sync-runtime.js) | 🏗️ 基建 | Runtime 模板同步（templates/ → 项目 scripts/runtime/） | `node scripts/sync-runtime.js --project <P> --apply` |
 | [ui-dev-workflow.js](scripts/ui-dev-workflow.js) | ✅ 验证 | V1-V4 验证引擎（设计文档/Prefab/代码/测试） | `node scripts/ui-dev-workflow.js --project <P> <ui-name>` |
 
@@ -464,27 +497,42 @@ Phase 3 设计       美术资源生成         资产同步              Prefab
 
 #### 场景 A：新建 UI 页面（完整 Phase 3 流程）
 
+> Phase 3 拆分为 **3a（设计+代码）** 和 **3b（资源绑定+Prefab）**，支持美术资源异步到位。
+
 ```
 步骤  脚本                    输入 → 输出                                前置条件
 ─────────────────────────────────────────────────────────────────────────────
+ === Phase 3a: 设计 + 代码（无需美术资源，无需 MCP） ===
  A1   sync-runtime.js         skill templates/ → 项目 runtime/           首次执行或 runtime 版本落后时
  A2   — (AI 手写) —           Phase 3 输出 design.md + asset-manifest    无（AI 核心工作）
- A3   — (AI 手写) —           Phase 3 输出 ThemeConfig + PageView.ts     A2 完成
- A4   resolve-asset-uuids.js  .meta 文件 → asset-manifest UUID 填充     美术资源已放入 assets/
- A5   generate-view.js        asset-manifest → XxxView.generated.ts     A4（manifest UUID 已填充）
- A6   design2prefab.js        design.md #4 + manifest → Prefab          A4 + A5
- A7   ui-dev-workflow.js      全部产出物 → V1-V4 验证报告               A6（所有文件就绪）
+ A3   — (AI 手写) —           Phase 3 输出 art-prompts.md               A2 完成
+ A4   — (AI 手写) —           Phase 3 输出 ThemeConfig + PageView.ts     A2 完成
+ A5   generate-view.js        asset-manifest → XxxView.generated.ts     A2（manifest 已创建，UUID 可为 null）
+ --- 此时代码可编译运行，Sprite 节点暂无纹理（白色占位）---
+ --- 美术资源异步生成中... ---
+
+ === Phase 3b: 资源绑定 + Prefab（需美术资源 + MCP） = 场景 H ===
+ A6   resolve-asset-uuids.js  .meta 文件 → asset-manifest UUID 填充     美术资源已放入 assets/
+ A7   generate-view.js        刷新 Layer 2（UUID 已填充）               A6 完成
+ A8   design2prefab.js        design.md #4 + manifest → MCP Prefab      A7 + MCP Server 已启动
+ A9   ui-dev-workflow.js      全部产出物 → V1-V4 验证报告               A8 完成
 ```
 
 **流程图**：
 ```
-sync-runtime ─→ AI 写 design.md + manifest + 代码
+=== Phase 3a（立即执行）===
+sync-runtime ─→ AI 写 design.md + manifest + art-prompts + 代码
                         ↓
+              generate-view（manifest UUID=null 也能生成骨架）
+                        ↓
+              代码可编译运行（白色占位 Sprite）
+
+=== Phase 3b（美术到位后）=== 同场景 H
               美术资源放入 assets/
                         ↓
-              resolve-asset-uuids ─→ generate-view ─→ design2prefab
-                                                           ↓
-                                                   ui-dev-workflow
+              resolve-asset-uuids ─→ generate-view（刷新）─→ design2prefab（MCP）
+                                                                    ↓
+                                                            ui-dev-workflow
 ```
 
 #### 场景 B：美术资源更新后刷新
@@ -552,6 +600,73 @@ sync-runtime ─→ AI 写 design.md + manifest + 代码
  F2   进入场景 A（A2 开始）
 ```
 
+#### 场景 G：框架/模板升级后批量刷新（Refresh）
+
+> **典型触发**：BaseView 升级（如 v1.0→v1.1 auto-bind）、generate-view.js 模板修改、runtime 模板 bug 修复等。
+> 此场景**仅刷新可安全重复生成的产物**，设计阶段产物保持不变。
+
+```
+步骤  操作                                   说明                             条件
+──────────────────────────────────────────────────────────────────────────────────────
+ G1   sync-runtime.js --apply                同步 runtime 模板到项目           runtime 版本有更新时
+ G2   resolve-asset-uuids.js --project <P>   刷新所有页面 manifest 的 UUID     UUID 有缺失/路径变更时
+ G3   generate-view.js all                   批量重新生成所有 Layer 2          核心目的
+ G4   构建 (node scripts/build.js)           编译验证                          —
+ G5   E2E 测试                               验证不黑屏、UI 正常              —
+```
+
+#### 场景 H：美术资源到位 + Prefab 创建（Phase 3b）
+
+> **典型触发**：Phase 3a 完成后，美术资源（部分或全部）已放入 assets/ 目录。
+> 也用于「美术资源分批到位」的增量更新场景。
+
+```
+步骤  操作                                    说明                              前置条件
+──────────────────────────────────────────────────────────────────────────────────────
+ H1   resolve-asset-uuids.js --project <P>    Smart Discovery 填充 UUID         美术资源已放入 assets/
+ H2   generate-view.js <page|all>             刷新 Layer 2（manifest 变化了）   H1 完成
+ H3   design2prefab.js --project <P> <page>   MCP 创建 Prefab                   H2 + MCP Server 已启动
+ H4   ui-dev-workflow.js --project <P> <page> V1-V4 验证                        H3 完成
+```
+
+> **增量模式**：如果只有部分资源到位，可以仅执行 H1+H2 刷新绑定。等全部资源就位后再执行 H3+H4。
+> `generate-view.js` 只输出 `status=ready|size_mismatch` 的条目，pending 资源会被自动跳过。
+
+### ⚠️ 术语规范："重新生成" vs "重新设计"
+
+> **Agent 必须严格区分这两个指令**，它们触发的场景和影响范围完全不同：
+
+| 指令 | 含义 | 触发场景 | 涉及产物 |
+|------|------|----------|----------|
+| **"重新生成"** | 仅重新执行**机械生成步骤**，设计决策类产物**保持不变** | 场景 G（批量刷新）/ B（资源更新）/ H（资源到位） | ✅ 标记的产物：View.generated.ts、Runtime 模板、manifest UUID、Prefab |
+| **"重新设计"** | **完全重新开始** Phase 3，包括重写 design.md、重新规划节点树和资源清单 | 场景 C（设计迭代）/ A（新建） | 全部产物，包括 ❌ 标记的：design.md、asset-manifest 条目、art-prompts.md、ThemeConfig |
+
+> 💡 **简记**："重新生成" = `generate-view.js all`（场景 G）。"重新设计" = AI 重写 design.md（场景 C/A）。
+
+### ⚠️ 产物可重复性规范
+
+> **关键问题**：哪些产物可以安全重复生成？
+
+| 类别 | 产物 | 可安全重复？ | 原因 | 触发条件 |
+|------|------|:---:|------|----------|
+| **设计阶段（与 UI 设计绑定）** |||||
+| | `design-dna.json` | ❌ | 全局 token SSOT，人工确认过 | 仅 UI 重新设计时 |
+| | `design.md` | ❌ | 9章设计文档，与参考图/人工审阅绑定 | 仅 UI 重新设计时 |
+| | `asset-manifest.json` 条目结构 | ❌ | 条目与 design.md 第6章绑定 | 仅 design.md 变更时 |
+| | `asset-manifest.json` UUID 字段 | ✅ | `resolve-asset-uuids.js` 自动扫描 | 资源变更/路径变更时 |
+| | `art-prompts.md` | ❌ | 美术 Prompt 与 design.md 第6章对应 | 仅 UI 重新设计时 |
+| **代码生成（可安全重复）** |||||
+| | `XxxView.generated.ts` (Layer 2) | ✅ | "generated" 就是设计来被覆盖的 | 场景 G/H/B |
+| | `XxxPageView.ts` (Layer 3) | ❌ | 人工业务逻辑，永不覆盖 | 仅新建时生成骨架 |
+| **基建（可安全同步）** |||||
+| | Runtime 模板 (`runtime/`) | ✅ | skill 模板 → 项目，有版本控制 | 场景 G/F |
+| **Prefab（可重建）** |||||
+| | `.prefab` 文件 | ✅ | 从 design.md + manifest 重建 | 场景 D/H |
+| **主题/配置** |||||
+| | `ThemeConfig.ts` | ⚠️ | 可能有手动调整 | 仅设计变更时 |
+
+> **简记**：❌ 的产物 = 设计决策类（需人工确认或 UI 重新设计才能改）。✅ 的产物 = 机械生成类（随时可从上游数据重新生成）。
+
 ### 脚本依赖关系图
 
 ```
@@ -569,8 +684,8 @@ sync-runtime ─→ AI 写 design.md + manifest + 代码
                     ▼                   ▼
          ┌──────────────────┐  ┌─────────────────┐
          │ generate-view.js │  │ design2prefab.js │ ← 内部 require:
-         │ ⚙️ Layer 2 代码   │  │ ⚙️ Prefab 生成   │    mcp-client.js (MCP 模式)
-         └──────────────────┘  │                  │    prefab-builder.js (Offline)
+         │ ⚙️ Layer 2 代码   │  │ ⚙️ Prefab 生成   │    mcp-client.js (MCP 模式 = 正式)
+         └──────────────────┘  │                  │    prefab-builder.js (Offline = 仅调试)
                                └────────┬─────────┘
                                         │ 所有产出物就绪
                                         ▼

@@ -84,14 +84,24 @@ Phase 3 设计       美术资源生成         资产同步              Prefab
 ### 典型工作流
 
 ```
-sync-runtime ─→ AI 写 design.md + manifest + 代码
+=== Phase 3a（立即执行，无需美术资源/MCP）===
+sync-runtime ─→ AI 写 design.md + manifest + art-prompts + 代码
                         ↓
+              generate-view（骨架，manifest UUID=null）
+
+=== Phase 3b（美术到位后，需要 MCP）===
               美术资源放入 assets/
                         ↓
-              resolve-asset-uuids ─→ generate-view ─→ design2prefab
-                                                           ↓
-                                                   ui-dev-workflow
+              resolve-asset-uuids ─→ generate-view（刷新）─→ design2prefab（MCP）
+                                                                   ↓
+                                                           ui-dev-workflow
 ```
+
+**常用场景**：
+- **场景 A**：新建 UI 页面（Phase 3a → 等资源 → Phase 3b）
+- **场景 B**：美术资源更新后刷新（resolve → generate → 可选 Prefab 重建）
+- **场景 G**：框架升级后批量刷新（sync-runtime → resolve → generate-view all → 构建 → E2E）
+- **场景 H**：资源到位 + Prefab 创建（= Phase 3b，resolve → generate → design2prefab → verify）
 
 **关键规则**：
 1. 底层库（mcp-client / prefab-builder）不手动调用，由 design2prefab 内部 require()
@@ -154,19 +164,31 @@ cocos-dna 提供通用运行时基础设施模板，由 skill 统一维护，通
 - 能直接在另一个 Cocos DNA 项目里用 → skill `templates/`
 - 绑定项目视觉风格/游戏流/业务逻辑 → 项目 `assets/scripts/`
 
-## MCP 降级策略
+## MCP 策略：MCP-Only（无降级）
 
-| 降级级别 | 条件 | 输出 |
-|---------|------|------|
-| **L1 完整模式** | MCP 正常连通 | design.md + View.generated.ts + PageView.ts + MCP 自动生成 Prefab |
-| **L2 文档模式** | MCP 不可用 | design.md + View.generated.ts + PageView.ts + Prefab 节点树定义文档 |
-| **L3 最小模式** | MCP 不可用且缺少模板信息 | design.md（9章完整） |
+Prefab 必须通过 MCP 在 Cocos Creator 编辑器中创建。不支持降级模式。
+
+| 情况 | 行为 |
+|------|------|
+| **MCP 正常** | design.md + View.generated.ts + PageView.ts + MCP 自动生成 Prefab |
+| **MCP 不可用** | Phase 3a 产出物正常输出，Prefab 步骤暂停等待 MCP 恢复 |
+
+`design2prefab.js --offline` 仅用于调试/预览节点树结构，不作为正式产出路径。
+
+## 美术资源异步工作流
+
+Phase 3 支持渐进式完成，不要求美术资源同步就位：
+
+| 子阶段 | 时机 | 产出物 | 依赖 MCP |
+|--------|------|--------|----------|
+| **Phase 3a** | 立即 | design.md + asset-manifest(UUID=null) + art-prompts + 代码 | ❌ |
+| **Phase 3b** | 美术到位后 | manifest(UUID填充) + View.generated.ts(刷新) + Prefab | ✅ |
 
 ## 核心特性
 
 - **DNA 数据驱动** — 所有颜色、字号、间距、动画参数可追溯到 DNA JSON
-- **MCP 自动创建** — 通过 Cocos MCP 工具自动创建节点树和 Prefab
-- **Offline Prefab 构建** — 无需编辑器，直接生成 .prefab JSON 文件
+- **MCP 自动创建** — 通过 Cocos MCP 工具自动创建节点树和 Prefab（正式产出路径）
+- **Offline Prefab 预览** — 无需编辑器，生成 .prefab JSON 供调试检查节点结构
 - **Smart Discovery** — 资产 UUID 自动解析，支持精确路径 → 文件名 → 模糊匹配三级策略
 - **完整动效规范** — 支持粒子系统、持续动画、背景动效的完整定义
 - **AI 绘图集成** — 自动生成美术资源的 AI 绘图 Prompt

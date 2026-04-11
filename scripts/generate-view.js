@@ -4,32 +4,34 @@
  *
  * [cocos-dna skill script]
  *
- * Reads asset-manifest.json for a given page and generates the corresponding
+ * Reads TWO manifest files for a given page and generates the corresponding
  * XxxView.generated.ts file with:
  *   - viewName / resourceGroup getters
- *   - assetManifest getter (dynamic + ready entries)
- *   - @property declarations for static entries (optional, requires --with-properties)
+ *   - @autoNode / @autoLabel / @autoSprite declarations (from view-manifest.json)
+ *   - assetManifest getter (from asset-manifest.json, dynamic + ready entries)
+ *   - @property(SpriteFrame) declarations (from asset-manifest.json, static entries)
+ *
+ * Data flow:
+ *   design.md @property 映射表 ──[AI 提取]──→ view-manifest.json (结构化 JSON)
+ *   asset-manifest.json ──────────────────→ 资源清单
+ *   generate-view.js reads both ──────────→ XxxView.generated.ts (Layer 2)
  *
  * Usage:
  *   node generate-view.js <page> [options]
+ *   node generate-view.js --project <dir> <page> [options]
  *
  * Examples:
  *   node generate-view.js battle
  *   node generate-view.js battle --dry-run
  *   node generate-view.js battle --out ./custom/path/
+ *   node generate-view.js --project /path/to/workspace/clocktower battle
  *   node generate-view.js all                          # Generate for all pages
  *
  * Options:
+ *   --project <dir> Project root directory (default: auto-detect from CWD upwards)
  *   --dry-run       Print generated code to stdout without writing files
  *   --out <dir>     Override output directory (default: assets/scripts/views/)
  *   --verbose       Show detailed processing info
- *
- * Data flow:
- *   cocos-dna/components/<page>/asset-manifest.json
- *       ↓ this script reads JSON
- *   assets/scripts/views/<PageName>View.generated.ts
- *       ↓ TypeScript literal (IAssetManifest)
- *   BaseView.onLoad() → _bindManifestAssets() auto-loads dynamic resources
  */
 
 'use strict';
@@ -37,16 +39,43 @@
 const fs = require('fs');
 const path = require('path');
 
-// ==================== Configuration ====================
+// ==================== Project Root Detection ====================
 
-/** Project root (workspace root) */
-const PROJECT_ROOT = path.resolve(__dirname, '../../../../');
+/**
+ * Auto-detect project root by walking up from startDir looking for cocos-dna/.
+ * Returns null if not found.
+ */
+function findProjectRoot(startDir) {
+    let dir = startDir || process.cwd();
+    while (dir !== path.dirname(dir)) {
+        if (fs.existsSync(path.join(dir, 'cocos-dna'))) return dir;
+        dir = path.dirname(dir);
+    }
+    return null;
+}
 
-/** cocos-dna components directory */
-const COMPONENTS_DIR = path.join(PROJECT_ROOT, 'cocos-dna', 'components');
-
-/** Default output directory for generated files */
-const DEFAULT_OUT_DIR = path.join(PROJECT_ROOT, 'assets', 'scripts', 'views');
+/**
+ * Resolve project root from --project flag or auto-detection.
+ */
+function resolveProjectRoot(explicitPath) {
+    if (explicitPath) {
+        const resolved = path.resolve(explicitPath);
+        if (!fs.existsSync(path.join(resolved, 'cocos-dna'))) {
+            console.error(`Error: --project path does not contain cocos-dna/: ${resolved}`);
+            process.exit(1);
+        }
+        return resolved;
+    }
+    const detected = findProjectRoot(process.cwd());
+    if (!detected) {
+        console.error(
+            'Error: Cannot detect project root (no cocos-dna/ found).\n' +
+            'Run from inside the project directory, or pass --project <dir>.'
+        );
+        process.exit(1);
+    }
+    return detected;
+}
 
 // ==================== Helpers ====================
 
@@ -70,21 +99,15 @@ function toResourceGroup(page) {
 }
 
 /**
- * Read and parse asset-manifest.json for a page.
- * @param {string} page - Page identifier (e.g. 'battle', 'char-select')
- * @returns {object} Parsed manifest JSON
+ * Read and parse a JSON file. Returns null if not found.
  */
-function readManifest(page) {
-    const manifestPath = path.join(COMPONENTS_DIR, page, 'asset-manifest.json');
-    if (!fs.existsSync(manifestPath)) {
-        throw new Error(`Manifest not found: ${manifestPath}`);
-    }
-    const raw = fs.readFileSync(manifestPath, 'utf-8');
-    return JSON.parse(raw);
+function readJsonFile(filePath) {
+    if (!fs.existsSync(filePath)) return null;
+    return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
 }
 
 /**
- * Filter dynamic + ready sprite-frame entries from manifest.
+ * Filter dynamic + ready sprite-frame entries from asset manifest.
  * These are the entries that BaseView._bindManifestAssets() will auto-load.
  */
 function getDynamicReadyEntries(manifest) {
@@ -96,8 +119,8 @@ function getDynamicReadyEntries(manifest) {
 }
 
 /**
- * Filter static entries from manifest.
- * These would be declared as @property in the generated file.
+ * Filter static entries from asset manifest.
+ * These would be declared as @property(SpriteFrame) in the generated file.
  */
 function getStaticEntries(manifest) {
     return (manifest.assets || []).filter(a =>
@@ -108,9 +131,6 @@ function getStaticEntries(manifest) {
 
 /**
  * Format a single IManifestAssetEntry as a TypeScript object literal.
- * @param {object} entry - Asset entry from manifest
- * @param {string} indent - Indentation string
- * @returns {string} TypeScript object literal
  */
 function formatAssetEntry(entry, indent = '                ') {
     const lines = [];
@@ -129,9 +149,7 @@ function formatAssetEntry(entry, indent = '                ') {
         lines.push(`${indent}    nineSlice: { top: ${ns.top}, bottom: ${ns.bottom}, left: ${ns.left}, right: ${ns.right} },`);
     }
 
-    // boundToNodes
     if (entry.boundToNodes && entry.boundToNodes.length > 0) {
-        // Strip path prefixes — only keep the leaf node name
         const leafNames = entry.boundToNodes.map(n => {
             const parts = n.split('/');
             return parts[parts.length - 1];
@@ -152,39 +170,97 @@ function formatAssetEntry(entry, indent = '                ') {
     return lines.join('\n');
 }
 
+/**
+ * Determine the auto-bind decorator for a given type.
+ * @param {string} type - 'Node', 'Label', 'Sprite'
+ * @returns {string} '@autoNode', '@autoLabel', '@autoSprite'
+ */
+function getAutoBindDecorator(type) {
+    switch (type) {
+        case 'Label':  return '@autoLabel';
+        case 'Sprite': return '@autoSprite';
+        case 'Node':
+        default:       return '@autoNode';
+    }
+}
+
+/**
+ * Determine the TypeScript type for a binding.
+ * @param {string} type - 'Node', 'Label', 'Sprite'
+ * @returns {string} cc type name
+ */
+function getCCType(type) {
+    switch (type) {
+        case 'Label':  return 'Label';
+        case 'Sprite': return 'Sprite';
+        case 'Node':
+        default:       return 'Node';
+    }
+}
+
+/**
+ * Group bindings by semantic category for readable code generation.
+ * Groups consecutive entries by their node name prefix / purpose pattern.
+ */
+function groupBindings(bindings) {
+    // Simple approach: group consecutive bindings that share a common prefix
+    // or just output them as-is with comments based on purpose
+    return bindings;
+}
+
 // ==================== Code Generation ====================
 
 /**
  * Generate the full XxxView.generated.ts content.
  * @param {string} page - Page identifier
- * @param {object} manifest - Parsed manifest JSON
- * @param {object} options - Generation options
+ * @param {object|null} viewManifest - Parsed view-manifest.json (or null)
+ * @param {object|null} assetManifest - Parsed asset-manifest.json (or null)
  * @returns {string} Generated TypeScript source code
  */
-function generateViewCode(page, manifest, options = {}) {
+function generateViewCode(page, viewManifest, assetManifest) {
     const className = `${toPascalCase(page)}ViewGenerated`;
     const viewName = `${toPascalCase(page)}View`;
     const resourceGroup = toResourceGroup(page);
-    const manifestSourceFile = `cocos-dna/components/${page}/asset-manifest.json`;
 
-    const dynamicEntries = getDynamicReadyEntries(manifest);
-    const staticEntries = getStaticEntries(manifest);
+    const bindings = viewManifest ? (viewManifest.bindings || []) : [];
+    const dynamicEntries = assetManifest ? getDynamicReadyEntries(assetManifest) : [];
+    const staticEntries = assetManifest ? getStaticEntries(assetManifest) : [];
 
-    // Determine imports
-    const imports = ['_decorator'];
-    const ccImports = new Set();
+    const assetManifestSource = `cocos-dna/components/${page}/asset-manifest.json`;
+    const viewManifestSource = `cocos-dna/components/${page}/view-manifest.json`;
+
+    // ---- Determine imports ----
+    const ccTypes = new Set();
+    ccTypes.add('_decorator');
+
+    // From view-manifest bindings
+    const needAutoNode = bindings.some(b => b.type === 'Node');
+    const needAutoLabel = bindings.some(b => b.type === 'Label');
+    const needAutoSprite = bindings.some(b => b.type === 'Sprite');
+
+    if (needAutoNode || bindings.some(b => !['Label', 'Sprite'].includes(b.type))) {
+        ccTypes.add('Node');
+    }
+    if (needAutoLabel) ccTypes.add('Label');
+    if (needAutoSprite) ccTypes.add('Sprite');
+
+    // From static asset entries
     if (staticEntries.length > 0) {
-        ccImports.add('SpriteFrame');
-        ccImports.add('Sprite');
-        ccImports.add('Node');
-    }
-    // Always need BaseView
-    const baseViewImports = ['BaseView'];
-    if (dynamicEntries.length > 0) {
-        baseViewImports.push('IAssetManifest');
+        ccTypes.add('SpriteFrame');
+        ccTypes.add('Sprite');
+        ccTypes.add('Node');
     }
 
-    // Build the file
+    // BaseView imports
+    const baseViewImports = ['BaseView'];
+    if (dynamicEntries.length > 0) baseViewImports.push('IAssetManifest');
+    if (needAutoNode || bindings.some(b => !['Label', 'Sprite'].includes(b.type))) {
+        baseViewImports.push('autoNode');
+    }
+    if (needAutoLabel) baseViewImports.push('autoLabel');
+    if (needAutoSprite) baseViewImports.push('autoSprite');
+
+    // ---- Build the file ----
     const lines = [];
 
     // Header comment
@@ -197,11 +273,20 @@ function generateViewCode(page, manifest, options = {}) {
     lines.push(` *   Layer 3 — ${toPascalCase(page)}PageView.ts (business logic, never overwritten)`);
     lines.push(` *`);
     lines.push(` * Auto-generated by: .codebuddy/skills/cocos-dna/scripts/generate-view.js`);
-    lines.push(` * Source: ${manifestSourceFile}`);
+    lines.push(` * Sources:`);
+    if (bindings.length > 0) {
+        lines.push(` *   UI bindings: ${viewManifestSource} (${bindings.length} bindings)`);
+    }
+    if (dynamicEntries.length > 0 || staticEntries.length > 0) {
+        lines.push(` *   Assets: ${assetManifestSource} (${dynamicEntries.length} dynamic, ${staticEntries.length} static)`);
+    }
     lines.push(` * Generated at: ${new Date().toISOString()}`);
     lines.push(` *`);
     lines.push(` * This file declares:`);
     lines.push(` *   - viewName / resourceGroup abstract property implementations`);
+    if (bindings.length > 0) {
+        lines.push(` *   - ${bindings.length} UI node bindings (@autoNode/@autoLabel/@autoSprite from view-manifest.json)`);
+    }
     if (dynamicEntries.length > 0) {
         lines.push(` *   - assetManifest getter (${dynamicEntries.length} dynamic entries from asset-manifest.json)`);
     }
@@ -216,7 +301,7 @@ function generateViewCode(page, manifest, options = {}) {
     lines.push(``);
 
     // Imports
-    const ccImportList = [...ccImports];
+    const ccImportList = [...ccTypes].filter(t => t !== '_decorator');
     if (ccImportList.length > 0) {
         lines.push(`import { ${['_decorator', ...ccImportList].join(', ')} } from 'cc';`);
     } else {
@@ -239,13 +324,42 @@ function generateViewCode(page, manifest, options = {}) {
     lines.push(`    protected get resourceGroup(): string { return '${resourceGroup}'; }`);
     lines.push(``);
 
+    // UI Node bindings (from view-manifest.json)
+    if (bindings.length > 0) {
+        lines.push(`    // ===== UI Node references (auto-bind from Prefab node tree) =====`);
+        lines.push(`    // Source: ${viewManifestSource}`);
+        lines.push(``);
+
+        // Calculate alignment padding for clean formatting
+        const maxDecoratorLen = Math.max(...bindings.map(b => {
+            const dec = getAutoBindDecorator(b.type);
+            return `${dec}('${b.node}')`.length;
+        }));
+        const maxPropLen = Math.max(...bindings.map(b => `${b.property}:`.length));
+
+        for (const binding of bindings) {
+            const decorator = getAutoBindDecorator(binding.type);
+            const ccType = getCCType(binding.type);
+            const decoratorStr = `${decorator}('${binding.node}')`;
+            const propStr = `${binding.property}:`;
+
+            // Pad for alignment
+            const decPad = ' '.repeat(Math.max(1, maxDecoratorLen - decoratorStr.length + 1));
+            const propPad = ' '.repeat(Math.max(1, maxPropLen - propStr.length + 1));
+
+            const comment = binding.purpose ? ` // ${binding.purpose}` : '';
+            lines.push(`    ${decoratorStr}${decPad}${propStr}${propPad}${ccType} = null!;${comment}`);
+        }
+        lines.push(``);
+    }
+
     // Asset Manifest getter (only if there are dynamic entries)
     if (dynamicEntries.length > 0) {
-        lines.push(`    // ===== Asset Manifest (from ${manifestSourceFile}) =====`);
+        lines.push(`    // ===== Asset Manifest (from ${assetManifestSource}) =====`);
         lines.push(``);
         lines.push(`    /**`);
         lines.push(`     * Dynamic asset manifest — sourced from:`);
-        lines.push(`     *   ${manifestSourceFile}`);
+        lines.push(`     *   ${assetManifestSource}`);
         lines.push(`     *`);
         lines.push(`     * Only dynamic (loadType: 'dynamic') + ready entries are included.`);
         lines.push(`     * Static entries are bound via @property in the Prefab editor.`);
@@ -256,7 +370,7 @@ function generateViewCode(page, manifest, options = {}) {
         lines.push(`    protected get assetManifest(): IAssetManifest {`);
         lines.push(`        return {`);
         lines.push(`            page: '${page}',`);
-        lines.push(`            sourceFile: '${manifestSourceFile}',`);
+        lines.push(`            sourceFile: '${assetManifestSource}',`);
         lines.push(`            assets: [`);
 
         for (const entry of dynamicEntries) {
@@ -269,7 +383,7 @@ function generateViewCode(page, manifest, options = {}) {
         lines.push(``);
     }
 
-    // Static @property declarations (informational — actual binding is in Prefab editor)
+    // Static @property declarations
     if (staticEntries.length > 0) {
         lines.push(`    // ===== Static resources (bound via @property in Prefab editor) =====`);
         lines.push(`    // These are declared here for reference. Actual binding is done in the Prefab editor.`);
@@ -294,21 +408,27 @@ function generateViewCode(page, manifest, options = {}) {
 
 function printUsage() {
     console.log(`
-Usage: node generate-view.js <page|all> [options]
+Usage: node generate-view.js [--project <dir>] <page|all> [options]
 
 Arguments:
   page        Page identifier (e.g. 'battle', 'char-select', 'main-menu', 'route-map')
-              Use 'all' to generate for all pages with asset-manifest.json
+              Use 'all' to generate for all pages with view-manifest.json or asset-manifest.json
 
 Options:
-  --dry-run   Print generated code to stdout without writing files
-  --out <dir> Override output directory (default: assets/scripts/views/)
-  --verbose   Show detailed processing info
-  --help      Show this help message
+  --project <dir>  Project root directory (default: auto-detect from CWD upwards)
+  --dry-run        Print generated code to stdout without writing files
+  --out <dir>      Override output directory (default: assets/scripts/views/)
+  --verbose        Show detailed processing info
+  --help           Show this help message
+
+Data sources (per page):
+  cocos-dna/components/<page>/view-manifest.json   → @autoNode/@autoLabel/@autoSprite declarations
+  cocos-dna/components/<page>/asset-manifest.json  → assetManifest getter + @property(SpriteFrame)
 
 Examples:
   node generate-view.js battle
   node generate-view.js battle --dry-run
+  node generate-view.js --project /path/to/project battle
   node generate-view.js all --verbose
 `);
 }
@@ -324,15 +444,38 @@ function main() {
     // Parse options
     const dryRun = args.includes('--dry-run');
     const verbose = args.includes('--verbose');
-    let outDir = DEFAULT_OUT_DIR;
 
+    // Parse --project
+    let explicitProject = null;
+    const projIdx = args.indexOf('--project');
+    if (projIdx !== -1 && args[projIdx + 1]) {
+        explicitProject = args[projIdx + 1];
+    }
+
+    // Resolve project root
+    const PROJECT_ROOT = resolveProjectRoot(explicitProject);
+    const COMPONENTS_DIR = path.join(PROJECT_ROOT, 'cocos-dna', 'components');
+    const DEFAULT_OUT_DIR = path.join(PROJECT_ROOT, 'assets', 'scripts', 'views');
+
+    if (verbose) {
+        console.log(`Project root: ${PROJECT_ROOT}`);
+    }
+
+    // Parse --out
+    let outDir = DEFAULT_OUT_DIR;
     const outIdx = args.indexOf('--out');
     if (outIdx !== -1 && args[outIdx + 1]) {
         outDir = path.resolve(args[outIdx + 1]);
     }
 
-    // Get page argument (first non-option arg)
-    const pageArg = args.find(a => !a.startsWith('--') && (args.indexOf(a) === 0 || args[args.indexOf(a) - 1] !== '--out'));
+    // Get page argument (first non-option arg, skip values of --project and --out)
+    const skipNextSet = new Set();
+    for (let i = 0; i < args.length; i++) {
+        if ((args[i] === '--project' || args[i] === '--out') && i + 1 < args.length) {
+            skipNextSet.add(i + 1);
+        }
+    }
+    const pageArg = args.find((a, i) => !a.startsWith('--') && !skipNextSet.has(i));
 
     if (!pageArg) {
         console.error('Error: No page specified');
@@ -343,17 +486,18 @@ function main() {
     // Determine pages to process
     let pages;
     if (pageArg === 'all') {
-        // Discover all pages with asset-manifest.json
+        // Discover all pages with either view-manifest.json or asset-manifest.json
         if (!fs.existsSync(COMPONENTS_DIR)) {
             console.error(`Error: Components directory not found: ${COMPONENTS_DIR}`);
             process.exit(1);
         }
         pages = fs.readdirSync(COMPONENTS_DIR).filter(dir => {
-            const manifestPath = path.join(COMPONENTS_DIR, dir, 'asset-manifest.json');
-            return fs.existsSync(manifestPath);
+            const viewManifestPath = path.join(COMPONENTS_DIR, dir, 'view-manifest.json');
+            const assetManifestPath = path.join(COMPONENTS_DIR, dir, 'asset-manifest.json');
+            return fs.existsSync(viewManifestPath) || fs.existsSync(assetManifestPath);
         });
         if (pages.length === 0) {
-            console.error('Error: No pages with asset-manifest.json found');
+            console.error('Error: No pages with view-manifest.json or asset-manifest.json found');
             process.exit(1);
         }
         console.log(`Found ${pages.length} pages: ${pages.join(', ')}`);
@@ -369,18 +513,27 @@ function main() {
         try {
             if (verbose) console.log(`\n--- Processing: ${page} ---`);
 
-            // Read manifest
-            const manifest = readManifest(page);
+            // Read both manifests (either can be null)
+            const viewManifestPath = path.join(COMPONENTS_DIR, page, 'view-manifest.json');
+            const assetManifestPath = path.join(COMPONENTS_DIR, page, 'asset-manifest.json');
+
+            const viewManifest = readJsonFile(viewManifestPath);
+            const assetManifest = readJsonFile(assetManifestPath);
+
+            if (!viewManifest && !assetManifest) {
+                throw new Error(`Neither view-manifest.json nor asset-manifest.json found for page '${page}'`);
+            }
+
             if (verbose) {
-                const dynamicCount = getDynamicReadyEntries(manifest).length;
-                const staticCount = getStaticEntries(manifest).length;
-                console.log(`  Manifest: ${manifest.assets.length} total assets`);
-                console.log(`  Dynamic (ready): ${dynamicCount}`);
-                console.log(`  Static: ${staticCount}`);
+                const bindingCount = viewManifest ? (viewManifest.bindings || []).length : 0;
+                const dynamicCount = assetManifest ? getDynamicReadyEntries(assetManifest).length : 0;
+                const staticCount = assetManifest ? getStaticEntries(assetManifest).length : 0;
+                console.log(`  view-manifest: ${viewManifest ? `${bindingCount} bindings` : '(not found)'}`);
+                console.log(`  asset-manifest: ${assetManifest ? `${dynamicCount} dynamic, ${staticCount} static` : '(not found)'}`);
             }
 
             // Generate code
-            const code = generateViewCode(page, manifest);
+            const code = generateViewCode(page, viewManifest, assetManifest);
             const className = `${toPascalCase(page)}View`;
             const fileName = `${className}.generated.ts`;
 
@@ -399,8 +552,8 @@ function main() {
                 console.log(`✅ Generated: ${outPath}`);
 
                 if (verbose) {
-                    const lines = code.split('\n').length;
-                    console.log(`   ${lines} lines, ${Buffer.byteLength(code, 'utf-8')} bytes`);
+                    const lineCount = code.split('\n').length;
+                    console.log(`   ${lineCount} lines, ${Buffer.byteLength(code, 'utf-8')} bytes`);
                 }
             }
 

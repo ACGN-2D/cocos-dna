@@ -1,0 +1,16 @@
+{
+  "_comment": "格式示例 — 实际值必须来自项目 design.md 第4/6章的 @property 映射表，禁止直接复制",
+  "page": "<page-name>",
+  "component": "<PageName>PageComp",
+  "sourceDesignDoc": "cocos-dna/components/<page-name>/design.md",
+  "version": "1.0",
+  "lastUpdated": "<YYYY-MM-DD>",
+  "bindings": [
+    { "property": "titleLabel",    "type": "Label",  "node": "GameTitle",       "purpose": "主标题文字更新" },
+    { "property": "subtitleLabel", "type": "Label",  "node": "GameSubtitle",    "purpose": "副标题文字更新" },
+    { "property": "primaryBtn",    "type": "Node",   "node": "PrimaryBtn",      "purpose": "主按钮交互绑定" },
+    { "property": "secondaryBtn",  "type": "Node",   "node": "SecondaryBtn",    "purpose": "次要按钮交互绑定" },
+    { "property": "bgSprite",      "type": "Sprite", "node": "BG",              "purpose": "背景图片/颜色控制" },
+    { "property": "versionLabel",  "type": "Label",  "node": "VersionLabel",    "purpose": "版本号动态更新" }
+  ]
+}
