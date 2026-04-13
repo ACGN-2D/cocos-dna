@@ -284,6 +284,8 @@ interface BackgroundEffectSpec {
 | 包含「后处理 / 制作说明」节 | 路径和切分参数已在 asset-manifest.json，Prompt 文件不做路径管理 | 删除该节，路径统一看 asset-manifest.json |
 | **Prompt 中逐帧描述**（`Frame 1:... Frame 2:...`） | AI 生图工具无法精确控制每帧细节，反而干扰质量 | Level A 只说动作名+帧数，Level B 用动作阶段术语（如 `from wind-up to follow-through`） |
 | **Prompt 写成完整长句/段落** | 冗长 prompt 降低 AI 理解精度 | **关键词扁平化**，逗号分隔短词短语 |
+| **🚫 多个动作合并成一个资源**（如 `rabbit_actions.png` 含 12 个动作的超级 Sprite Sheet） | ① AI 生成工具（无论图片/3D/视频）无法在单次 Prompt 中精确控制多种不同动作的质量；② 一个 Prompt 塞入过多动作描述导致每个动作质量严重下降；③ 后期修改某一动作需重新生成整个资源，浪费成本 | **一个动作 = 一个独立资源 = 一个独立 Prompt**（输出介质不限：可以是 Sprite Sheet `.png`、3D 动画 `.glb/.fbx`、视频 `.mp4` 等）。见下方 ⭐⭐ 铁律 |
+| **🚫 文件名/属性表用纯序号命名**（如 `pig_attack_1.png`、`动作: attack_1（轻拳）`） | ① 看文件名无法得知具体是什么动作；② 属性表英文标识无语义，与 Prompt 关键词无法对应；③ 多个 `_1/_2/_3` 之间完全无区分度 | **文件名和属性表必须用语义化英文**：`pig_light_punch.png`、`动作: light_punch（轻拳）`。见下方 🚫 规则 2 |
 
 ---
 
@@ -305,6 +307,154 @@ interface BackgroundEffectSpec {
 | **禁止逐帧描述** | 绝对不写 `Frame 1:... Frame 2:...` | 见下方分级模板 | `Frame 1: left foot forward, Frame 2: ...` |
 
 > **为什么禁止逐帧？** 所有主流 AI 生图工具（Midjourney / SD / DALL·E / Qwen-Image）均无法精确控制 "第几帧做什么"，逐帧描述反而干扰生成质量。
+
+#### ⭐⭐ 铁律：一个动作 = 一个独立资源 = 一个独立 Prompt（介质无关）
+
+> **这是最高优先级规则，违反此规则的 art-prompts.md 必须打回重写。**
+
+**规则 1：一个动作一个资源（拆分规则）**
+
+当一个角色有多个动作时，**每个动作必须拆分成独立的资源条目**，每个资源有自己的：
+- `## 资源 #N:` 章节标题
+- 属性表（包含该动作专属的帧数、尺寸等）
+- 独立的 Prompt 代码块
+
+适用于所有输出介质（`.png` Sprite Sheet / `.glb` `.fbx` 3D 动画 / `.mp4` AI 视频 / Spine / DragonBones 等）。
+
+| 理由 | 说明 |
+|------|------|
+| **AI 质量** | 一个 Prompt 只描述一个动作时，AI 的理解精度和生成质量最高 |
+| **可迭代** | 修改某个动作不需要重新生成其他动作，节省时间和费用 |
+| **可替换** | 可以用不同工具生成不同动作（如 idle 用 AI 图片，ultimate 用 AI 视频） |
+| **可验收** | 每个动作独立验收，不合格只重做该动作 |
+| **版本管理** | Git diff 粒度到单个动作文件，历史清晰 |
+
+---
+
+**🚫 规则 2：命名语义化（硬性禁止纯序号）**
+
+> **违反本规则的 art-prompts.md 必须打回重写，不可部分修补。**
+
+本规则同时约束**三个位置**——文件名、属性表 `动作` 字段、章节标题——三者必须统一使用语义化的动作名。
+
+**禁止模式（正则检测）**：文件名或属性表 `动作` 字段中出现以下模式即为违规：
+- `_数字` 结尾（如 `_1` / `_2` / `_3`）
+- `{类别}_数字`（如 `attack_1` / `skill_2` / `move_3`）
+- `_all` / `_actions` / `_full`（合并违规，规则 1 已覆盖）
+
+**要求格式**：
+
+```
+文件名:    {角色名}_{语义动作名}.{ext}
+属性表:    | **动作** | {语义动作名}（中文说明） |
+章节标题:  ## 资源 #N: {角色} {中文动作名} ... — `{文件名}`
+```
+
+其中 `{语义动作名}` 必须是**能让不了解项目的人猜出动作内容的英文短语**。
+
+**通用动作名白名单**：以下动作名本身已有足够语义，可以直接使用，不需要再加修饰词：
+`idle` / `walk` / `walk_fwd` / `walk_back` / `run` / `jump` / `crouch` / `hit` / `knockdown` / `death`
+
+**违规 → 修正 全流程对比**：
+
+| 位置 | ❌ 违规写法 | ✅ 修正写法 |
+|------|-----------|-----------|
+| **文件名** | `pig_attack_1.png` | `pig_light_punch.png` |
+| **属性表** | `attack_1（轻拳）` | `light_punch（轻拳）` |
+| **标题** | `Pig 轻拳 ... — pig_attack_1.png` | `Pig 轻拳 ... — pig_light_punch.png` |
+| **文件名** | `pig_attack_2.png` | `pig_heavy_haymaker.png` |
+| **属性表** | `attack_2（重拳）` | `heavy_haymaker（重拳）` |
+| **标题** | `Pig 重拳 ... — pig_attack_2.png` | `Pig 重拳 ... — pig_heavy_haymaker.png` |
+| **文件名** | `pig_attack_3.png` | `pig_combo_finisher.png` |
+| **属性表** | `attack_3（连击终结）` | `combo_finisher（连击终结）` |
+| **标题** | `Pig 连击终结 ... — pig_attack_3.png` | `Pig 连击终结 ... — pig_combo_finisher.png` |
+| **文件名** | `rabbit_skill.png` | `rabbit_dark_wave.png` |
+| **属性表** | `skill（技能）` | `dark_wave（暗波）` |
+
+> **判断标准**：拿掉角色名前缀后，剩余的动作名能否让一个不了解项目的人大致猜出动作内容？如果不能→违规→重写。
+
+---
+
+**🚫 规则 3：属性表 ↔ 文件名 ↔ Prompt 三者一致性**
+
+> **违反本规则的资源条目必须打回重写。**
+
+属性表 `动作` 字段、文件名中的动作部分、Prompt 中的动作描述关键词，三者必须**语义一致且互相对应**。
+任何一处与另外两处不对应，即为违规。
+
+**正确示范**：
+
+```
+# ✅ 三者一致：文件名/属性表/Prompt 都在说"轻拳"
+文件名:   pig_light_punch.png
+属性表:   | **动作** | light_punch（轻拳） |
+Prompt:   quick one-hand jab, short-range snap punch, compact shoulder thrust
+
+# ✅ 三者一致：文件名/属性表/Prompt 都在说"重拳"
+文件名:   pig_heavy_haymaker.png
+属性表:   | **动作** | heavy_haymaker（重拳） |
+Prompt:   powerful heavy haymaker, wide-arc swing, full-body step-in punch
+
+# ✅ 三者一致：文件名/属性表/Prompt 都在说"连击终结"
+文件名:   pig_combo_finisher.png
+属性表:   | **动作** | combo_finisher（连击终结） |
+Prompt:   combo finisher smash, wide-arc follow-up strike, twisting body momentum
+```
+
+**违规示范**：
+
+```
+# ❌ 文件名 attack_1 无语义 → 违反规则 2
+# ❌ 属性表写 attack_1（轻拳）但文件名看不出轻拳 → 违反规则 3
+文件名:   pig_attack_1.png
+属性表:   | **动作** | attack_1（轻拳） |
+Prompt:   quick jab punch  ← Prompt 倒是在说轻拳，但文件名/属性表不对应
+```
+
+**一致性校验清单**：
+- [ ] 文件名动作部分是语义化英文（非纯序号）→ 否则先修规则 2
+- [ ] 属性表 `动作` 字段英文标识 == 文件名动作部分（如 `light_punch` 对 `_light_punch`）
+- [ ] 属性表中文说明与英文标识含义一致（如 `light_punch（轻拳）` ✅ / `light_punch（重击）` ❌）
+- [ ] Prompt 动作关键词准确传达属性表所描述的动作视觉特征
+- [ ] 同角色不同动作的 Prompt 之间有**明确的视觉差异**（不能只换一两个词）
+
+---
+
+**规则 4：同角色多动作间的区分度**
+
+同一角色有多个类似动作时，每个动作的 Prompt 必须在动作描述关键词上有**明确的视觉差异**，让 AI 生成出视觉上可区分的结果。
+
+| 比较维度 | 可用来制造差异的关键词方向（示例，非固定词汇） |
+|---------|---------------------------------------------|
+| **力度/幅度** | light/quick/snap vs heavy/powerful/full-body |
+| **速度/节奏** | fast strike vs slow wind-up |
+| **身体姿态** | one-hand jab vs full-body swing, leaning forward |
+| **动作范围** | short-range vs wide-arc |
+| **动感/能量** | 无 dynamic action vs dynamic action, impact energy |
+
+> ⚠️ 以上只是**思考方向**，具体用什么词取决于游戏世界观和角色设计。Agent 需要根据属性表中的动作名称和中文说明，自行选择能准确传达该动作视觉特征的关键词。
+
+**反面案例**（来自实际项目，同时违反规则 2 + 3 + 4）：
+
+```
+# ❌ 文件名纯序号（违反规则 2）
+# ❌ 属性表 attack_1/attack_2 无语义（违反规则 2）
+# ❌ Prompt 几乎一样只换一个词（违反规则 4）
+pig_attack_1.png → attack_1（轻拳）→ quick jab punch, dynamic action
+pig_attack_2.png → attack_2（重拳）→ heavy straight punch, dynamic action
+
+# ✅ 修正后：三条规则全部满足
+pig_light_punch.png   → light_punch（轻拳）  → quick one-hand jab, short-range snap punch, compact shoulder thrust
+pig_heavy_haymaker.png → heavy_haymaker（重拳）→ powerful heavy haymaker, wide-arc swing, full-body step-in punch
+pig_combo_finisher.png → combo_finisher（连击终结）→ combo finisher smash, wide-arc follow-up strike, twisting body momentum
+# → 文件名有语义 ✅ 属性表英文对应 ✅ Prompt 力度/姿态/幅度全方位拉开差异 ✅
+```
+
+---
+
+**规则 5：角色外观一致性保障**
+
+拆分后，多个 Prompt 间的角色外观一致性通过 **「角色外观基线」** 段落保证——在 art-prompts.md 的「风格基调」节中定义一段角色外观描述关键词（如 `white fur, long upright ears with pink lining, brown leather vest, cream tunic, red eyes`），所有该角色的动作 Prompt **必须原样复制此基线段落**，确保同一角色在不同动作中外观一致。
 
 #### ⭐ 描述深度分级（核心决策）
 
@@ -412,6 +562,10 @@ mobile game style, clean outline
 - art-prompts.md 中的 `资源 #N` 序号必须与文件顶部「批量生成检查清单」表格中的 `#` 列**一一对应**
 - 每个 `资源 #N` 节的 `输出文件` 必须与 `asset-manifest.json` 中的条目**完全匹配**
 - 相似资源（如多种颜色的卡牌背景、多种图标）**也必须每个单独一节**，不可合并
+- **🚫 角色动作拆分验证**：若属性表中出现 `动作数 > 1` 或文件名含 `_actions` / `_all` / `_full` 等合并暗示词 → **打回重写**（见铁律规则 1）
+- **🚫 文件名/属性表语义化验证**：文件名或属性表 `动作` 字段中出现 `_数字` 结尾模式（如 `attack_1` / `skill_2`）→ **打回重写**（见 🚫 规则 2）。通用动作名白名单（idle/walk/walk_fwd/walk_back/run/jump/crouch/hit/knockdown/death）除外
+- **🚫 三者一致性验证**：属性表 `动作` 字段英文标识 ≠ 文件名动作部分，或 Prompt 动作关键词与属性表不对应 → **打回重写**（见 🚫 规则 3）
+- **🚫 多动作区分度验证**：同角色类似动作的 Prompt 动作关键词只换一两个词其余完全相同 → **打回重写**（见规则 4）
 
 ---
 
@@ -426,8 +580,13 @@ mobile game style, clean outline
 
 ### art-prompts.md 格式完整性
 - [ ] 每个资源独立一节（`## 资源 #N: 描述 — filename.png`），无合并
+- [ ] **🚫 每个动作独立一个资源**（无 `_actions` / `_all` 等合并文件，无 `动作数 > 1` 的属性表）→ 违反则打回重写
+- [ ] **🚫 文件名和属性表语义化**：动作文件名和属性表 `动作` 字段必须用语义化英文（如 `light_punch`），禁止 `_数字` 结尾（如 `attack_1`）；通用动作名白名单除外 → 违反则打回重写
+- [ ] **🚫 三者一致性**：属性表 `动作` 字段英文标识 == 文件名动作部分 == Prompt 动作关键词语义 → 违反则打回重写
+- [ ] **🚫 多动作区分度**：同角色类似动作的 Prompt 动作描述关键词有明确视觉差异（不能只换一两个词）→ 违反则打回重写
 - [ ] 每节包含属性表（输出文件/尺寸/格式/用途，九宫格/绑定节点如有）
 - [ ] 每节包含独立的 Prompt 代码块（一个资源一个代码块）
+- [ ] **同一角色的不同动作 Prompt 均包含相同的「角色外观基线」关键词段落**（保证一致性）
 - [ ] 序号与「批量生成检查清单」表格一一对应
 - [ ] 输出文件名与 asset-manifest.json 中的条目完全匹配
 - [ ] 包含「风格基调」节（从 design-dna.json 提取）
