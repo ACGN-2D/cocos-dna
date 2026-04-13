@@ -282,6 +282,130 @@ interface BackgroundEffectSpec {
 | 缺少属性表直接写 Prompt | 缺失尺寸/格式等关键信息 | 必须先列属性表再写 Prompt |
 | 属性表包含九宫格参数 / 路径信息 | 与 asset-manifest.json 冗余，维护两份易不一致 | 九宫格/路径/loadType 等技术参数只在 asset-manifest.json 中定义 |
 | 包含「后处理 / 制作说明」节 | 路径和切分参数已在 asset-manifest.json，Prompt 文件不做路径管理 | 删除该节，路径统一看 asset-manifest.json |
+| **Prompt 中逐帧描述**（`Frame 1:... Frame 2:...`） | AI 生图工具无法精确控制每帧细节，反而干扰质量 | Level A 只说动作名+帧数，Level B 用动作阶段术语（如 `from wind-up to follow-through`） |
+| **Prompt 写成完整长句/段落** | 冗长 prompt 降低 AI 理解精度 | **关键词扁平化**，逗号分隔短词短语 |
+
+---
+
+### ⭐ Prompt 写作原则（⚠️ Agent 必须遵守）
+
+> **基本格式：关键词扁平化（逗号分隔短语），不写完整长句。**
+> **描述深度：根据动作复杂度分 3 级，简单循环用关键词即可，复杂动作需补充动作阶段描述。**
+
+#### 通用原则（所有类型都遵守）
+
+| 原则 | 说明 | ✅ 正确 | ❌ 错误 |
+|------|------|---------|---------| 
+| **关键词扁平化** | 用逗号分隔的短词/短语，不写长句 | `chibi style, bright blue hoodie, running pose` | `A character who is wearing a bright blue hoodie and running` |
+| **视角前置** | 开头明确 `2D side-view` 或 `front-view` | `2D side-view cartoon character sprite sheet` | `Sprite sheet for a character` |
+| **风格词紧跟主体** | 画风关键词在主体后立即出现 | `...character, chibi style, ...` | 风格词埋在句尾 |
+| **技术参数内嵌** | 帧尺寸和帧数作为关键词写入 | `64x64 per frame, 4 frames run cycle` | 另起句子描述尺寸 |
+| **游戏资源标记** | 必含 `game asset` / `game sprite` | `pixel-perfect, game asset` | 缺少此标记 |
+| **背景统一** | 必含 `transparent background` | — | 遗漏透明背景 |
+| **禁止逐帧描述** | 绝对不写 `Frame 1:... Frame 2:...` | 见下方分级模板 | `Frame 1: left foot forward, Frame 2: ...` |
+
+> **为什么禁止逐帧？** 所有主流 AI 生图工具（Midjourney / SD / DALL·E / Qwen-Image）均无法精确控制 "第几帧做什么"，逐帧描述反而干扰生成质量。
+
+#### ⭐ 描述深度分级（核心决策）
+
+根据动作的复杂度，选择不同的描述级别：
+
+| 级别 | 适用动作 | 描述方式 | 示例关键词 |
+|------|---------|---------|-----------| 
+| **Level A：纯关键词** | 简单循环（idle / walk / run） | 动作名 + 帧数，无需额外描述 | `idle breathing pose, 4 frames idle cycle` |
+| **Level B：关键词 + 动作阶段** | 复杂动作（attack / cast / dodge / hit / death） | 动作名 + **1-2 个动画阶段短语** | `sword slash, from wind-up to follow-through, dynamic action, 6 frames` |
+| **Level C：关键词 + 姿态细节** | 单帧静态姿态（jump / slide / stand） | **1-2 个姿态特征短语** | `jumping in the air, arms up, legs bent` |
+
+> **判断原则**：
+> - AI 训练数据中大量存在 walk/run/idle 循环 → 只说名字 AI 就懂 → Level A
+> - attack/cast/dodge 变化多（剑砍 vs 拳击 vs 魔法）→ 需描述动作节奏 → Level B
+> - 单帧定格需要特定体态 → 描述关键肢体位置 → Level C
+
+#### 动作阶段术语参考（Level B 使用）
+
+用**动画制作的标准阶段术语**代替逐帧描述，AI 能准确理解这些概念：
+
+| 动作阶段术语 | 含义 | 适用动作 |
+|-------------|------|---------|
+| `from wind-up to follow-through` | 蓄力 → 出招 → 收招 全过程 | 近战攻击 |
+| `anticipation to release` | 预备 → 释放 | 施法/投掷 |
+| `impact and recoil` | 命中 + 反冲 | 受击 |
+| `dynamic action` | 动感强烈 | 所有战斗动作 |
+| `smooth loop` | 平滑循环 | idle / walk |
+| `dramatic collapse` | 戏剧性倒地 | 死亡 |
+
+#### Prompt 模板
+
+**多帧 Sprite Sheet — Level A（简单循环：idle / walk / run）：**
+
+```
+2D side-view [画风] [角色简述] sprite sheet, [风格词],
+[服装/外观关键词], [动作名] pose, [帧尺寸] per frame,
+[N] frames [动作] cycle, transparent background,
+pixel-perfect, game asset, clean outline
+```
+
+**多帧 Sprite Sheet — Level B（复杂动作：attack / cast / dodge）：**
+
+```
+2D side-view [画风] [角色简述] sprite sheet, [风格词],
+[服装/外观关键词], [具体动作描述], [动作阶段短语],
+[帧尺寸] per frame, [N] frames, dynamic action,
+transparent background, pixel-perfect, game asset, clean outline
+```
+
+**单帧 Sprite — Level C（静态姿态：jump / slide / stand）：**
+
+```
+2D side-view [画风] [角色简述], [风格词],
+[服装/外观关键词], [姿态特征短语],
+transparent background, game sprite, clean outline
+```
+
+**实际示例：**
+
+```
+# ═══ Level A：简单循环（跑步 4帧） ═══
+2D side-view cartoon runner character sprite sheet, chibi style,
+bright blue hoodie, running pose, white sneakers,
+transparent background, pixel-perfect, game asset,
+64x64 per frame, 4 frames run cycle
+
+# ═══ Level A：简单循环（待机 4帧） ═══
+2D side-view cartoon character sprite sheet, chibi style,
+blue hoodie, idle breathing pose,
+64x64 per frame, 4 frames idle cycle,
+transparent background, pixel-perfect, game asset, clean outline
+
+# ═══ Level B：复杂动作（剑砍攻击 6帧） ═══
+2D side-view pixel knight sprite sheet, 16-bit style,
+silver armor, red cape, two-handed sword slash,
+from wind-up to follow-through, dynamic action,
+64x64 per frame, 6 frames,
+transparent background, pixel-perfect, game asset, clean outline
+
+# ═══ Level B：复杂动作（魔法施法 6帧） ═══
+2D side-view cartoon mage sprite sheet, chibi style,
+purple robe, glowing staff, casting fire spell,
+anticipation to release, magical energy burst,
+64x64 per frame, 6 frames,
+transparent background, pixel-perfect, game asset
+
+# ═══ Level C：单帧定格（跳跃） ═══
+2D side-view cartoon character jumping in the air, blue hoodie,
+arms up, legs bent, chibi style, transparent background,
+game sprite asset
+
+# ═══ Level C：单帧定格（下滑） ═══
+2D side-view cartoon character sliding on ground, blue hoodie,
+body low and flat, chibi style, transparent background,
+game sprite, dynamic pose
+
+# ═══ Level C：单帧定格（站立） ═══
+Cute cartoon boy character, side view, blue jacket,
+standing idle pose, flat design, transparent background,
+mobile game style, clean outline
+```
 
 ### 对应关系规则
 
