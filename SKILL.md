@@ -29,6 +29,20 @@ description: >-
 
 cocos-dna 依赖 design-dna skill。如未安装，引导用户安装：`https://github.com/zanwei/design-dna`
 
+### 跨 Skill 协作
+
+cocos-dna 通过**稳定的数据契约**为其他 skill 提供服务，不直接调用其他 skill 的脚本。
+
+| 消费者 | 契约文件 | 提供脚本 | 协作模式 |
+|--------|----------|----------|----------|
+| **cocos-test** | `verify-spec.json` | `extract-verify-spec.js` | cocos-dna 导出"该验什么"，cocos-test 决定"怎么验" |
+| **cocos-test** | Prefab `.prefab` | `check-prefab-dupes.js` | 通用 Prefab 重名检测，cocos-test 可在测试流程中调用 |
+
+**职责边界**：
+- cocos-dna 负责：UI 结构定义、数据提取、verify-spec.json schema 维护
+- cocos-test 负责：测试模板、断言逻辑、Playwright/Jest 集成
+- 中间契约（verify-spec.json）的 schema 变更由 cocos-dna 维护，向后兼容
+
 > **项目隔离原则**：本技能是通用规范，不包含任何特定项目的设计内容。所有项目特定的设计系统来自各项目自己的 `cocos-dna/design-dna.json`。
 
 ---
@@ -274,6 +288,7 @@ A7  AI 手写 ThemeConfig 等     → 主题配置
 | 2 | UI 结构协议文档 | `cocos-dna/components/<page>/design.md` | 9章 Markdown（含第1.5章），页面设计数据的唯一存储位置 |
 | 3 | 资产绑定清单 | `cocos-dna/components/<page>/asset-manifest.json` | Sprite UUID 映射。运行 `resolve-asset-uuids.js` Smart Discovery 自动同步 |
 | 3b | UI 节点绑定清单 | `cocos-dna/components/<page>/view-manifest.json` | 从 design.md 第6.2章 @property 映射表提取的结构化 JSON。`generate-view.js` 读取此文件生成 @autoNode/@autoLabel/@autoSprite 声明 |
+| 3c | 验证规格 | `cocos-dna/components/<page>/verify-spec.json` | 标准化验证契约（节点/Label/Sprite/资源清单），由 `extract-verify-spec.js` 生成，供 **cocos-test** 的 `generate-verify.js` 消费。详见「跨 Skill 协作」章节 |
 | 4 | AI 绘图 Prompt | `cocos-dna/components/<page>/assets/art-prompts.md` | 美术资源生成指引，**每个资源独立一节**（`## 资源 #N: 描述 — filename.png`），严禁合并。格式规范见 → [references/output-spec.md](references/output-spec.md) |
 | 5a | **三层架构** — AI 生成层 | `assets/scripts/views/<Page>View.generated.ts` | Layer 2：@property 声明 + assetManifest（AI 可安全覆盖） |
 | 5b | **三层架构** — 业务逻辑层 | `assets/scripts/views/<Page>PageView.ts` | Layer 3：业务逻辑（人写，AI **永不覆盖**） |
@@ -490,6 +505,8 @@ Phase 3 设计       美术资源生成         资产同步              Prefab
 | [generate-view.js](scripts/generate-view.js) | ⚙️ 生成 | view-manifest + asset-manifest → Layer 2 XxxView.generated.ts | `node scripts/generate-view.js [--project <P>] <page\|all> [--dry-run] [--out <dir>]` |
 | [sync-runtime.js](scripts/sync-runtime.js) | 🏗️ 基建 | Runtime 模板同步（templates/ → 项目 scripts/runtime/） | `node scripts/sync-runtime.js --project <P> --apply` |
 | [ui-dev-workflow.js](scripts/ui-dev-workflow.js) | ✅ 验证 | V1-V4 验证引擎（设计文档/Prefab/代码/测试） | `node scripts/ui-dev-workflow.js --project <P> <ui-name>` |
+| [extract-verify-spec.js](scripts/extract-verify-spec.js) | 📤 数据导出 | 从 view-manifest + asset-manifest 提取标准化 verify-spec.json，供 cocos-test 消费 | `node scripts/extract-verify-spec.js --project <P> <page\|--all>` |
+| [check-prefab-dupes.js](scripts/check-prefab-dupes.js) | ✅ 验证 | Prefab 节点重名检测（通用版，支持任意页面） | `node scripts/check-prefab-dupes.js --project <P> <page\|--all> [--verbose]` |
 
 ### ⭐ 脚本编排地图（Orchestration Map）
 
